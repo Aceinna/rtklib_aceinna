@@ -38,7 +38,7 @@ linux{
 }
 macx{
     RTKLIB =../../src/libRTKLib.a
-    LIBS+= $${RTKLIB}
+    LIBS += $${RTKLIB} -lpthread
 }
 win32 {
     CONFIG(debug) {

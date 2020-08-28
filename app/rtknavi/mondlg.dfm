@@ -331,7 +331,7 @@ object MonitorDialog: TMonitorDialog
         'SBAS'
         'Dual-Freq'
         'Estimate STEC'
-        'IONEX TEC'
+        'Uncombined'
         'QZS Broadcast'
         'QZS LEX')
     end

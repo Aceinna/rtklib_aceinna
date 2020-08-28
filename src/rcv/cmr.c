@@ -346,8 +346,8 @@
 #define M_MFLAG_NOL2MSG2        M_BIT7
 
 /* Conversion factors: */
-#define L1_WAVELENGTH           (CLIGHT/FREQL1)  /* GPS L1 wavelength (meters) */
-#define L2_WAVELENGTH           (CLIGHT/FREQL2)  /* GPS L2 wavelength (meters) */
+#define L1_WAVELENGTH           (CLIGHT/FREQ1)  /* GPS L1 wavelength (meters) */
+#define L2_WAVELENGTH           (CLIGHT/FREQ2)  /* GPS L2 wavelength (meters) */
 #define RANGE_MS                (CLIGHT*0.001)  /* Meters per millisecond at light speed */
 
 /*

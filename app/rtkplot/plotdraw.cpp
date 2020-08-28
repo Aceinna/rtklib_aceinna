@@ -6,6 +6,7 @@
 #include "plotmain.h"
 #include "graph.h"
 #include "refdlg.h"
+#include "geview.h"
 #include "gmview.h"
 
 #define COL_ELMASK  clRed
@@ -264,6 +265,7 @@ void __fastcall TPlot::DrawTrk(int level)
             enu2ecef(opos,enu,rr);
             for (i=0;i<3;i++) rr[i]+=OPos[i];
             ecef2pos(rr,cent);
+            GoogleEarthView->SetCent(cent[0]*R2D,cent[1]*R2D);
             GoogleMapView  ->SetCent(cent[0]*R2D,cent[1]*R2D);
         }
         Refresh_GEView();
@@ -1000,7 +1002,7 @@ void __fastcall TPlot::DrawObsSlip(double *yp)
             if (!SatSel[obs->sat-1]) continue;
             slip=0;
             for (j=0;j<NFREQ+NEXOBS;j++) {
-                if ((!*code||strstr(code2obs(obs->code[j],NULL),code))&&
+				if ((!*code||strstr(code2obs(0,obs->code[j],NULL),code))&&
                     (obs->LLI[j]&2)) slip=1;
             }
             if (!slip) continue;
@@ -1020,14 +1022,14 @@ void __fastcall TPlot::DrawObsSlip(double *yp)
             slip=0;
             if (ShowSlip==2) { // LLI
                 for (j=0;j<NFREQ+NEXOBS;j++) {
-                    if ((!*code||strstr(code2obs(obs->code[j],NULL),code))&&
-                        (obs->LLI[j]&1)) slip=1;
+					if ((!*code||strstr(code2obs(0,obs->code[j],NULL),code))&&
+						(obs->LLI[j]&1)) slip=1;
                 }
             }
             else if (!*code||!strcmp(code,"1")||!strcmp(code,"2")) {
                 if (obs->L[0]!=0.0&&obs->L[1]!=0.0&&
                     satsys(obs->sat,NULL)!=SYS_GLO) {
-                    gf=CLIGHT*(obs->L[0]/FREQL1-obs->L[1]/FREQL2);
+                    gf=CLIGHT*(obs->L[0]/FREQ1-obs->L[1]/FREQ2);
                     if (fabs(gfp[obs->sat-1]-gf)>THRESLIP) slip=1;
                     gfp[obs->sat-1]=gf;
                 }
@@ -1211,14 +1213,14 @@ void __fastcall TPlot::DrawSky(int level)
             slip=0;
             if (ShowSlip==2) { // LLI
                 for (j=0;j<NFREQ+NEXOBS;j++) {
-                    if ((!*code||strstr(code2obs(obs->code[j],NULL),code))&&
-                        (obs->LLI[j]&1)) slip=1;
+					if ((!*code||strstr(code2obs(0,obs->code[j],NULL),code))&&
+						(obs->LLI[j]&1)) slip=1;
                 }
             }
             else if (!*code||!strcmp(code,"1")||!strcmp(code,"2")) {
                 if (obs->L[0]!=0.0&&obs->L[1]!=0.0&&
                     satsys(obs->sat,NULL)!=SYS_GLO) {
-                    gf=CLIGHT*(obs->L[0]/FREQL1-obs->L[1]/FREQL2);
+                    gf=CLIGHT*(obs->L[0]/FREQ1-obs->L[1]/FREQ2);
                     if (fabs(gfp[obs->sat-1]-gf)>THRESLIP) slip=1;
                     gfp[obs->sat-1]=gf;
                 }
@@ -1306,15 +1308,15 @@ void __fastcall TPlot::DrawSky(int level)
             }
             else {
                 for (j=0;j<NFREQ+NEXOBS;j++) {
-                    if (strstr(code2obs(obs->code[j],NULL),code)) break;
+					if (strstr(code2obs(0,obs->code[j],NULL),code)) break;
                 }
-                if (j>=NFREQ+NEXOBS) continue;
+				if (j>=NFREQ+NEXOBS) continue;
                 
                 s+=ss.sprintf("%s%s%s : %04.1f : %d : %s",obs->P[j]==0.0?"-":"C",
                               obs->L[j]==0.0?"-":"L",obs->D[j]==0.0?"-":"D",
                               obs->SNR[j]*0.25,obs->LLI[j],
-                              code2obs(obs->code[j],NULL));
-            }
+							  code2obs(0,obs->code[j],NULL));
+			}
             TColor col=ObsColor(obs,Az[i],El[i]);
             p2.y+=hh;
             GraphS->DrawText(p2,s,col==clBlack?MColor[0][0]:col,2,2,0);
@@ -1564,8 +1566,8 @@ void __fastcall TPlot::DrawSnr(int level)
                     if (Obs.data[j].sat!=sat) continue;
                     
                     for (k=0;k<NFREQ+NEXOBS;k++) {
-                        if (strstr(code2obs(Obs.data[j].code[k],NULL),code)) break;
-                    }
+						if (strstr(code2obs(0,Obs.data[j].code[k],NULL),code)) break;
+					}
                     if (k>=NFREQ+NEXOBS) continue;
                     
                     x[n]=TimePos(Obs.data[j].time);
@@ -1707,7 +1709,7 @@ void __fastcall TPlot::DrawSnrE(int level)
                 if (Obs.data[j].sat!=sat) continue;
                 
                 for (k=0;k<NFREQ+NEXOBS;k++) {
-                    if (strstr(code2obs(Obs.data[j].code[k],NULL),code)) break;
+					if (strstr(code2obs(0,Obs.data[j].code[k],NULL),code)) break;
                 }
                 if (k>=NFREQ+NEXOBS) continue;
                 if (El[j]<=0.0) continue;
@@ -1829,7 +1831,7 @@ void __fastcall TPlot::DrawMpS(int level)
             if (Obs.data[i].sat!=sat) continue;
             
             for (j=0;j<NFREQ+NEXOBS;j++) {
-                if (strstr(code2obs(Obs.data[i].code[j],NULL),code)) break;
+				if (strstr(code2obs(0,Obs.data[i].code[j],NULL),code)) break;
             }
             if (j>=NFREQ+NEXOBS) continue;
             if (El[i]<=0.0) continue;
@@ -1855,8 +1857,8 @@ void __fastcall TPlot::DrawMpS(int level)
             obs=&Obs.data[i];
             if (SatMask[obs->sat-1]||!SatSel[obs->sat-1]||El[i]<=0.0) continue;
             for (j=0;j<NFREQ+NEXOBS;j++) {
-                if (strstr(code2obs(obs->code[j],NULL),code)) break;
-            }
+				if (strstr(code2obs(0,obs->code[j],NULL),code)) break;
+			}
             if (j>=NFREQ+NEXOBS) continue;
             col=MpColor(!Mp[j]?0.0:Mp[j][i]);
             
@@ -2058,27 +2060,36 @@ void __fastcall TPlot::Refresh_GEView(void)
     double pos[3]={0},heading,ddeg;
     int i,opts[12],sel=!BtnSol1->Down&&BtnSol2->Down?1:0;
     
-	if (BtnShowTrack->Down) {
+    // get ge options
+    GoogleEarthView->GetOpts(opts);
+    
+    if (BtnShowTrack->Down) {
         
         // update mark
         if (BtnSol2->Down&&SolData[1].n>0) {
             sol=getsol(SolData+1,SolIndex[1]);
             ecef2pos(sol->rr,pos);
             pos[2]-=geoidh(pos);
+            GoogleEarthView->SetMark(2,pos);
+            GoogleEarthView->ShowMark(2);
             GoogleMapView->SetMark(2,pos);
             GoogleMapView->ShowMark(2);
         }
         else {
+            GoogleEarthView->HideMark(2);
             GoogleMapView->HideMark(2);
         }
         if (BtnSol1->Down&&SolData[0].n>0) {
             sol=getsol(SolData,SolIndex[0]);
             ecef2pos(sol->rr,pos);
             pos[2]-=geoidh(pos);
+            GoogleEarthView->SetMark(1,pos);
+            GoogleEarthView->ShowMark(1);
             GoogleMapView->SetMark(1,pos);
             GoogleMapView->ShowMark(1);
         }
         else {
+            GoogleEarthView->HideMark(1);
             GoogleMapView->HideMark(1);
         }
         // update heading
@@ -2095,12 +2106,43 @@ void __fastcall TPlot::Refresh_GEView(void)
                 if      (GEHeading<-180.0) GEHeading+=360.0;
                 else if (GEHeading> 180.0) GEHeading-=360.0;
             }
+            GoogleEarthView->SetHeading(GEHeading);
             delete vel;
         }
     }
     else {
-		GoogleMapView->HideMark(1);
+        GoogleEarthView->HideMark(1);
+        GoogleEarthView->HideMark(2);
+        GoogleMapView->HideMark(1);
         GoogleMapView->HideMark(2);
+    }
+    // update track
+    if (BtnSol1->Down&&!BtnConnect->Down) {
+        if (!GEDataState[0]) {
+            GoogleEarthView->HideTrack(1);
+            GEDataState[0]=GoogleEarthView->UpdateTrack(1,SolData);
+        }
+        GoogleEarthView->ShowTrack(1);
+    }
+    else {
+        GoogleEarthView->HideTrack(1);
+    }
+    if (BtnSol2->Down&&!BtnConnect->Down) {
+        if (!GEDataState[1]) {
+            GoogleEarthView->HideTrack(2);
+            GEDataState[1]=GoogleEarthView->UpdateTrack(2,SolData+1);
+        }
+        GoogleEarthView->ShowTrack(2);
+    }
+    else {
+        GoogleEarthView->HideTrack(2);
+    }
+    // update points
+    if (BtnShowMap->Down) {
+        GoogleEarthView->ShowPoint();
+    }
+    else {
+        GoogleEarthView->HidePoint();
     }
 }
 // refresh google map view -----------------------------------------------------

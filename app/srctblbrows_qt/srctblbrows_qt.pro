@@ -30,7 +30,7 @@ linux{
 }
 macx{
     RTKLIB =../../src/libRTKLib.a
-    LIBS+= $${RTKLIB}
+    LIBS += $${RTKLIB}
 }
 win32 {
     CONFIG(debug) {

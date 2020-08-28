@@ -844,7 +844,6 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
 {
     char buff[1024],id[32],*p;
     int sat,ex;
-    int ppp=PosMode>=PMODE_PPP_KINEMA;
     
     // processing options
     prcopt.mode     =PosMode;
@@ -870,13 +869,8 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
     prcopt.posopt[5]=PosOpt[5];
     prcopt.dynamics =DynamicModel;
     prcopt.tidecorr =TideCorr;
-    prcopt.armaxiter=ARIter;
-    prcopt.niter    =NumIter;
-    prcopt.minfixsats=MinFixSats;
-    prcopt.minholdsats=MinHoldSats;
-    prcopt.mindropsats=MinDropSats;
-    prcopt.arfilter=ARFilter;
-    prcopt.rcvstds=RcvStds;
+	prcopt.armaxiter=ARIter;
+	prcopt.niter    =NumIter;
     prcopt.intpref  =IntpRefObs;
     prcopt.sbassatsel=SbasSat;
     prcopt.eratio[0]=MeasErrR1;
@@ -892,24 +886,22 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
     prcopt.prn[4]   =PrNoise5;
     prcopt.sclkstab =SatClkStab;
     prcopt.thresar[0]=ValidThresAR;
-    prcopt.thresar[1]=MaxPosVarAR;
-    prcopt.thresar[2]=GloHwBias;
-    prcopt.thresar[3]=ThresAR3;
-    prcopt.thresar[4]=ThresAR4;
+    prcopt.thresar[1]=ThresAR2;
+    prcopt.thresar[2]=ThresAR3;
     prcopt.elmaskar =ElMaskAR*D2R;
     prcopt.elmaskhold=ElMaskHold*D2R;
     prcopt.thresslip=SlipThres;
     prcopt.maxtdiff =MaxAgeDiff;
     prcopt.maxgdop  =RejectGdop;
     prcopt.maxinno  =RejectThres;
-    prcopt.varholdamb=VarHoldAmb;
-    prcopt.gainholdamb=GainHoldAmb;
     prcopt.outsingle=OutputSingle;
-    if (BaseLineConst) {
+	if (BaseLineConst)
+	{
         prcopt.baseline[0]=BaseLine[0];
         prcopt.baseline[1]=BaseLine[1];
     }
-    else {
+	else
+	{
         prcopt.baseline[0]=0.0;
         prcopt.baseline[1]=0.0;
     }
@@ -929,7 +921,8 @@ int __fastcall TMainForm::GetOption(prcopt_t &prcopt, solopt_t &solopt,
     }
     else prcopt.refpos=RefPosType-2;
     
-    if (RovAntPcv) {
+	if (RovAntPcv)
+	{
         strcpy(prcopt.anttype[0],RovAnt.c_str());
         prcopt.antdel[0][0]=RovAntE;
         prcopt.antdel[0][1]=RovAntN;
@@ -1213,7 +1206,7 @@ void __fastcall TMainForm::LoadOpt(void)
     InputFile6->Items  =ReadList(ini,"hist","inputfile6");
     OutputFile->Items  =ReadList(ini,"hist","outputfile");
     
-    PosMode            =ini->ReadInteger("opt","posmode",        2);
+    PosMode            =ini->ReadInteger("opt","posmode",        0);
     Freq               =ini->ReadInteger("opt","freq",           1);
     Solution           =ini->ReadInteger("opt","solution",       0);
     ElMask             =ini->ReadFloat  ("opt","elmask",      15.0);
@@ -1226,11 +1219,11 @@ void __fastcall TMainForm::LoadOpt(void)
     IonoOpt            =ini->ReadInteger("opt","ionoopt",     IONOOPT_BRDC);
     TropOpt            =ini->ReadInteger("opt","tropopt",     TROPOPT_SAAS);
     RcvBiasEst         =ini->ReadInteger("opt","rcvbiasest",     0);
-    DynamicModel       =ini->ReadInteger("opt","dynamicmodel",   1);
+    DynamicModel       =ini->ReadInteger("opt","dynamicmodel",   0);
     TideCorr           =ini->ReadInteger("opt","tidecorr",       0);
     SatEphem           =ini->ReadInteger("opt","satephem",       0);
     ExSats             =ini->ReadString ("opt","exsats",        "");
-    NavSys             =ini->ReadInteger("opt","navsys",   SYS_GPS|SYS_GLO);
+    NavSys             =ini->ReadInteger("opt","navsys",   SYS_GPS);
     PosOpt[0]          =ini->ReadInteger("opt","posopt1",        0);
     PosOpt[1]          =ini->ReadInteger("opt","posopt2",        0);
     PosOpt[2]          =ini->ReadInteger("opt","posopt3",        0);
@@ -1239,32 +1232,23 @@ void __fastcall TMainForm::LoadOpt(void)
     PosOpt[5]          =ini->ReadInteger("opt","posopt6",        0);
     MapFunc            =ini->ReadInteger("opt","mapfunc",        0);
     
-    AmbRes             =ini->ReadInteger("opt","ambres",         3);
-    GloAmbRes          =ini->ReadInteger("opt","gloambres",      3);
-    BdsAmbRes          =ini->ReadInteger("opt","bdsambres",      0);
+    AmbRes             =ini->ReadInteger("opt","ambres",         1);
+    GloAmbRes          =ini->ReadInteger("opt","gloambres",      1);
+    BdsAmbRes          =ini->ReadInteger("opt","bdsambres",      1);
     ValidThresAR       =ini->ReadFloat  ("opt","validthresar", 3.0);
-    MaxPosVarAR        =ini->ReadFloat  ("opt","maxposvarar", 0.10);
-    GloHwBias          =ini->ReadFloat  ("opt","glohwbias",   0.00);
-    ThresAR3           =ini->ReadFloat  ("opt","thresar3",    1E-7);
-    ThresAR4           =ini->ReadFloat  ("opt","thresar4",    1E-3);
+    ThresAR2           =ini->ReadFloat  ("opt","thresar2",  0.9999);
+    ThresAR3           =ini->ReadFloat  ("opt","thresar3",    0.25);
     LockCntFixAmb      =ini->ReadInteger("opt","lockcntfixamb",  0);
-    FixCntHoldAmb      =ini->ReadInteger("opt","fixcntholdamb", 20);
-    ElMaskAR           =ini->ReadFloat  ("opt","elmaskar",    15.0);
-    ElMaskHold         =ini->ReadFloat  ("opt","elmaskhold",  15.0);
-    OutCntResetAmb     =ini->ReadInteger("opt","outcntresetbias",20);
+    FixCntHoldAmb      =ini->ReadInteger("opt","fixcntholdamb", 10);
+    ElMaskAR           =ini->ReadFloat  ("opt","elmaskar",     0.0);
+    ElMaskHold         =ini->ReadFloat  ("opt","elmaskhold",   0.0);
+    OutCntResetAmb     =ini->ReadInteger("opt","outcntresetbias",5);
     SlipThres          =ini->ReadFloat  ("opt","slipthres",   0.05);
     MaxAgeDiff         =ini->ReadFloat  ("opt","maxagediff",  30.0);
-    RejectThres        =ini->ReadFloat  ("opt","rejectthres", 1000);
-    VarHoldAmb         =ini->ReadFloat  ("opt","varholdamb",   0.1);
-    GainHoldAmb        =ini->ReadFloat  ("opt","gainholdamb", 0.01);
+    RejectThres        =ini->ReadFloat  ("opt","rejectthres", 30.0);
     RejectGdop         =ini->ReadFloat  ("opt","rejectgdop",  30.0);
     ARIter             =ini->ReadInteger("opt","ariter",         1);
     NumIter            =ini->ReadInteger("opt","numiter",        1);
-    MinFixSats         =ini->ReadInteger("opt","minfixsats",     4);
-    MinHoldSats        =ini->ReadInteger("opt","minholdsats",    5);
-    MinDropSats        =ini->ReadInteger("opt","mindropsats",   10);
-    ARFilter           =ini->ReadInteger("opt","arfilter",       1);
-    RcvStds            =ini->ReadInteger("opt","rcvstds",        0);
     CodeSmooth         =ini->ReadInteger("opt","codesmooth",     0);
     BaseLine[0]        =ini->ReadFloat  ("opt","baselinelen",  0.0);
     BaseLine[1]        =ini->ReadFloat  ("opt","baselinesig",  0.0);
@@ -1284,23 +1268,23 @@ void __fastcall TMainForm::LoadOpt(void)
     OutputGeoid        =ini->ReadInteger("opt","outputgeoid",    0);
     SolStatic          =ini->ReadInteger("opt","solstatic",      0);
     DebugTrace         =ini->ReadInteger("opt","debugtrace",     0);
-    DebugStatus        =ini->ReadInteger("opt","debugstatus",    2);
+    DebugStatus        =ini->ReadInteger("opt","debugstatus",    0);
     
-    MeasErrR1          =ini->ReadFloat  ("opt","measeratio1",300.0);
-    MeasErrR2          =ini->ReadFloat  ("opt","measeratio2",300.0);
+    MeasErrR1          =ini->ReadFloat  ("opt","measeratio1",100.0);
+    MeasErrR2          =ini->ReadFloat  ("opt","measeratio2",100.0);
     MeasErr2           =ini->ReadFloat  ("opt","measerr2",   0.003);
     MeasErr3           =ini->ReadFloat  ("opt","measerr3",   0.003);
     MeasErr4           =ini->ReadFloat  ("opt","measerr4",   0.000);
-    MeasErr5           =ini->ReadFloat  ("opt","measerr5",   1.000);
+    MeasErr5           =ini->ReadFloat  ("opt","measerr5",  10.000);
     SatClkStab         =ini->ReadFloat  ("opt","satclkstab", 5E-12);
     PrNoise1           =ini->ReadFloat  ("opt","prnoise1",    1E-4);
     PrNoise2           =ini->ReadFloat  ("opt","prnoise2",    1E-3);
     PrNoise3           =ini->ReadFloat  ("opt","prnoise3",    1E-4);
-    PrNoise4           =ini->ReadFloat  ("opt","prnoise4",     3.0);
-    PrNoise5           =ini->ReadFloat  ("opt","prnoise5",     1.0);
+    PrNoise4           =ini->ReadFloat  ("opt","prnoise4",    1E+1);
+    PrNoise5           =ini->ReadFloat  ("opt","prnoise5",    1E+1);
     
     RovPosType         =ini->ReadInteger("opt","rovpostype",     0);
-    RefPosType         =ini->ReadInteger("opt","refpostype",     5);
+    RefPosType         =ini->ReadInteger("opt","refpostype",     0);
     RovPos[0]          =ini->ReadFloat  ("opt","rovpos1",      0.0);
     RovPos[1]          =ini->ReadFloat  ("opt","rovpos2",      0.0);
     RovPos[2]          =ini->ReadFloat  ("opt","rovpos3",      0.0);
@@ -1463,10 +1447,8 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteInteger("opt","gloambres",   GloAmbRes   );
     ini->WriteInteger("opt","bdsambres",   BdsAmbRes   );
     ini->WriteFloat  ("opt","validthresar",ValidThresAR);
-    ini->WriteFloat  ("opt","maxposvarar", MaxPosVarAR );
-    ini->WriteFloat  ("opt","glohwbias",   GloHwBias   );
+    ini->WriteFloat  ("opt","thresar2",    ThresAR2    );
     ini->WriteFloat  ("opt","thresar3",    ThresAR3    );
-    ini->WriteFloat  ("opt","thresar4",    ThresAR4    );
     ini->WriteInteger("opt","lockcntfixamb",LockCntFixAmb);
     ini->WriteInteger("opt","fixcntholdamb",FixCntHoldAmb);
     ini->WriteFloat  ("opt","elmaskar",    ElMaskAR    );
@@ -1476,15 +1458,8 @@ void __fastcall TMainForm::SaveOpt(void)
     ini->WriteFloat  ("opt","maxagediff",  MaxAgeDiff  );
     ini->WriteFloat  ("opt","rejectgdop",  RejectGdop  );
     ini->WriteFloat  ("opt","rejectthres", RejectThres );
-    ini->WriteFloat  ("opt","varholdamb",  VarHoldAmb  );
-    ini->WriteFloat  ("opt","gainholdamb", GainHoldAmb );
     ini->WriteInteger("opt","ariter",      ARIter      );
     ini->WriteInteger("opt","numiter",     NumIter     );
-    ini->WriteInteger("opt","minfixsats",  MinFixSats  );
-    ini->WriteInteger("opt","minholdsats", MinHoldSats );
-    ini->WriteInteger("opt","mindropsats", MinDropSats );
-    ini->WriteInteger("opt","arfilter",    ARFilter    );
-    ini->WriteInteger("opt","rcvstds",     RcvStds     );
     ini->WriteInteger("opt","codesmooth",  CodeSmooth  );
     ini->WriteFloat  ("opt","baselinelen", BaseLine[0] );
     ini->WriteFloat  ("opt","baselinesig", BaseLine[1] );
@@ -1618,8 +1593,6 @@ void __fastcall TMainForm::SaveOpt(void)
     delete ini;
 }
 
-//---------------------------------------------------------------------------
-
 void __fastcall TMainForm::Panel4Resize(TObject *Sender)
 {
 	TButton *btns[]={
@@ -1672,4 +1645,5 @@ void __fastcall TMainForm::Panel2Resize(TObject *Sender)
 	BtnAbort->Left =BtnExec->Left;
 }
 //---------------------------------------------------------------------------
+
 

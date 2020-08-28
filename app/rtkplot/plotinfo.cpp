@@ -328,9 +328,9 @@ void __fastcall TPlot::UpdateObsType(void)
     }
     for (i=1;i<=MAXCODE;i++) {
         if (!cmask[i]) continue;
-        codes[n++]=code2obs(i,&j);
+		codes[n++]=code2obs(0,i,&j);
         fmask[j-1]=1;
-    }
+	}
     ObsType ->Items->Clear();
     ObsType2->Items->Clear();
     ObsType ->Items->Add("ALL");

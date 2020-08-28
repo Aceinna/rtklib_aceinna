@@ -16,6 +16,8 @@
 *     [1] IS-GPS-200D, Navstar GPS Space Segment/Navigation User Interfaces,
 *         7 March, 2006
 *     [2] RTCA/DO-229C, Minimum operational performanc standards for global
+*         positioning system/wide area augmentation system airborne equipment,
+*         RTCA inc, November 28, 2001
 *     [3] M.Rothacher, R.Schmid, ANTEX: The Antenna Exchange Format Version 1.4,
 *         15 September, 2010
 *     [4] A.Gelb ed., Applied Optimal Estimation, The M.I.T Press, 1974
@@ -129,6 +131,7 @@
 #define _POSIX_C_SOURCE 199506
 #include <stdarg.h>
 #include <ctype.h>
+#include <string.h>
 #ifndef WIN32
 #include <dirent.h>
 #include <time.h>
@@ -139,16 +142,20 @@
 #include "rtklib.h"
 
 /* constants -----------------------------------------------------------------*/
-
+#define MAX_N 100
 #define POLYCRC32   0xEDB88320u /* CRC32 polynomial */
 #define POLYCRC24Q  0x1864CFBu  /* CRC24Q polynomial */
-
+#define MIN(x,y)    ((x)<=(y)?(x):(y))
+#define MAX(x,y)    ((x)>=(y)?(x):(y))
+#define SQRT(x)     ((x)<=0.0?0.0:sqrt(x))
 #define SQR(x)      ((x)*(x))
 #define MAX_VAR_EPH SQR(300.0)  /* max variance eph to reject satellite (m^2) */
 
 static const double gpst0[]={1980,1, 6,0,0,0}; /* gps time reference */
 static const double gst0 []={1999,8,22,0,0,0}; /* galileo system time reference */
 static const double bdt0 []={2006,1, 1,0,0,0}; /* beidou time reference */
+int rcd[MAX_N];
+int comb_j=0;
 
 static double leaps[MAXLEAPS+1][7]={ /* leap seconds (y,m,d,h,m,s,utc-gpst) */
     {2017,1,1,0,0,0,-18},
@@ -184,30 +191,29 @@ const double chisqr[100]={      /* chi-sqr(n) (alpha=0.001) */
     138 ,139 ,140 ,142 ,143 ,144 ,145 ,147 ,148 ,149
 };
 const double lam_carr[MAXFREQ]={ /* carrier wave length (m) */
-	CLIGHT/FREQL1,CLIGHT/FREQL2,CLIGHT/FREQL5,CLIGHT/FREQE6,
-    CLIGHT/FREQE5ab,CLIGHT/FREQs
+    CLIGHT/FREQ1,CLIGHT/FREQ2,CLIGHT/FREQ5,CLIGHT/FREQ6,CLIGHT/FREQ7,
+    CLIGHT/FREQ8,CLIGHT/FREQ9
 };
 const prcopt_t prcopt_default={ /* defaults processing options */
-    PMODE_KINEMA,0,2,SYS_GPS|SYS_GLO|SYS_GAL,   /* mode,soltype,nf,navsys */
-    15.0*D2R,{{0,0}},           /* elmin,snrmask */
-    0,3,3,1,0,1,                /* sateph,modear,glomodear,gpsmodear,bdsmodear,arfilter */
-    20,0,4,5,10,20,             /* maxout,minlock,minfixsats,minholdsats,mindropsats,minfix */
-    0,1,1,1,1,0,                /* rcvstds,armaxiter,estion,esttrop,dynamics,tidecorr */
+    PMODE_SINGLE,0,2,SYS_GPS,1,0, /* mode,soltype,nf,navsys,gnsisb,gloicb */
+    10.0*D2R,{{0,0}},           /* elmin,snrmask */
+    0,1,1,1,                    /* sateph,modear,glomodear,bdsmodear */
+    5,0,10,1,                   /* maxout,minlock,minfix,armaxiter */
+    0,0,0,0,                    /* estion,esttrop,dynamics,tidecorr */
     1,0,0,0,0,                  /* niter,codesmooth,intpref,sbascorr,sbassatsel */
     0,0,                        /* rovpos,refpos */
-    WEIGHTOPT_ELEVATION,        /* weightmode */
-    {300.0,300.0,300.0},        /* eratio[] */
-    {100.0,0.003,0.003,0.0,1.0,52.0}, /* err[] */
+    {100.0,100.0},              /* eratio[] */
+    {100.0,0.003,0.003,0.0,1.0}, /* err[] */
+	{0.0,0.0,0.0,0.0,0.0,0.0},
     {30.0,0.03,0.3},            /* std[] */
     {1E-4,1E-3,1E-4,1E-1,1E-2,0.0}, /* prn[] */
     5E-12,                      /* sclkstab */
-    {3.0,0.25,0.0,1E-9,1E-5,0.0,0.0,0.0}, /* thresar */
-    0.0,0.0,0.05,0.1,0.01,      /* elmaskar,elmaskhold,thresslip,varholdamb,gainholdamb */
-    30.0,5.0,30.0,              /* maxtdif,maxinno,maxgdop */
+    {3.0,0.9999,0.25,0.1,0.05}, /* thresar */
+    0.0,0.0,0.05,               /* elmaskar,almaskhold,thresslip */
+    30.0,30.0,30.0,             /* maxtdif,maxinno,maxgdop */
     {0},{0},{0},                /* baseline,ru,rb */
-    {"",""},                    /* anttype */
-    {{0}},{{0}},{0},            /* antdel,pcv,exsats */
-    1,1                         /* maxaveep,initrst */
+    {""},                       /* anttype */
+    {0},{0},{0}             /* antdel,pcv,exsats */
 };
 const solopt_t solopt_default={ /* defaults solution output options */
     SOLF_LLH,TIMES_GPST,1,3,    /* posf,times,timef,timeu */
@@ -220,9 +226,9 @@ const char *formatstrs[32]={    /* stream format strings */
     "RTCM 2",                   /*  0 */
     "RTCM 3",                   /*  1 */
     "NovAtel OEM6",             /*  2 */
-    "ComNav",                   /*  3 */
+    "NovAtel OEM3",             /*  3 */
     "u-blox",                   /*  4 */
-    "Swift Navigation SBP",     /*  5 */
+    "Superstar II",             /*  5 */
     "Hemisphere",               /*  6 */
     "SkyTraq",                  /*  7 */
     "GW10",                     /*  8 */
@@ -251,24 +257,24 @@ static char *obscodes[]={       /* observation code strings */
     "5B","5C","9A","9B","9C", "9X",""  ,""  ,""  ,""    /* 50-59 */
 };
 static unsigned char obsfreqs[]={
-    /* 1:L1/E1/B1, 2:L2/E5b/B2, 3:L5/E5a, 4:E6/LEX/B3, 5:E5(a+b), 6:S */
+    /* 1:L1/E1, 2:L2/B1, 3:L5/E5a/L3, 4:L6/LEX/B3, 5:E5b/B2, 6:E5(a+b), 7:S */
     0, 1, 1, 1, 1,  1, 1, 1, 1, 1, /*  0- 9 */
     1, 1, 1, 1, 2,  2, 2, 2, 2, 2, /* 10-19 */
-    2, 2, 2, 2, 3,  3, 3, 2, 2, 2, /* 20-29 */
-    4, 4, 4, 4, 4,  4, 4, 5, 5, 5, /* 30-39 */
-    1, 1, 3, 3, 3,  3, 3, 1, 1, 3, /* 40-49 */
-    3, 3, 6, 6, 6,  6, 0, 0, 0, 0  /* 50-59 */
+    2, 2, 2, 2, 3,  3, 3, 5, 5, 5, /* 20-29 */
+    4, 4, 4, 4, 4,  4, 4, 6, 6, 6, /* 30-39 */
+    2, 2, 4, 4, 3,  3, 3, 1, 1, 3, /* 40-49 */
+    3, 3, 7, 7, 7,  7, 0, 0, 0, 0  /* 50-59 */
 };
 static char codepris[7][MAXFREQ][16]={  /* code priority table */
-
-   /* L1/E1/B1   L2/E5b/B2   L5/E5a/L3 E6/LEX  E5(a+b)  S */
-    {"CPYWMNSL","CLPYWMNDSX","IQX"   ,""        ,""      ,""    }, /* GPS */
-    {"PC"      ,"PC"        ,"IQX"   ,""        ,""      ,""    }, /* GLO */
-    {"CABXZ"   ,"IQX"       ,"IQX"   ,"ABCXZ"   ,"IQX"   ,""    }, /* GAL */
-    {"CSLXZ"   ,"SLX"       ,"IQX"   ,"SLX"     ,""      ,""    }, /* QZS */
-    {"C"       ,""          ,"IQX"   ,""        ,""      ,""    }, /* SBS */
-    {"IQX"     ,"IQX"       ,"IQX"   ,"IQX"     ,""      ,""    }, /* BDS */
-    {""        ,""          ,"ABCX"  ,""        ,""      ,"ABCX"}  /* IRN */
+   
+   /* L1/E1      L2/B1        L5/E5a/L3 L6/LEX/B3 E5b/B2    E5(a+b)  S */
+    {"CPYWMNSL","PYWCMNDSLX","IQX"     ,""       ,""       ,""      ,""    }, /* GPS */
+    {"PC"      ,"PC"        ,"IQX"     ,""       ,""       ,""      ,""    }, /* GLO */
+    {"CABXZ"   ,""          ,"IQX"     ,"ABCXZ"  ,"IQX"    ,"IQX"   ,""    }, /* GAL */
+    {"CSLXZ"   ,"SLX"       ,"IQX"     ,"SLX"    ,""       ,""      ,""    }, /* QZS */
+    {"C"       ,""          ,"IQX"     ,""       ,""       ,""      ,""    }, /* SBS */
+    {"IQX"     ,"IQX"       ,"IQX"     ,"IQX"    ,"IQX"    ,""      ,""    }, /* BDS */
+    {""        ,""          ,"ABCX"    ,""       ,""       ,""      ,"ABCX"}  /* IRN */
 };
 static fatalfunc_t *fatalfunc=NULL; /* fatal callback function */
 
@@ -341,14 +347,6 @@ static const unsigned int tbl_CRC24Q[]={
     0xE37B16,0x6537ED,0x69AE1B,0xEFE2E0,0x709DF7,0xF6D10C,0xFA48FA,0x7C0401,
     0x42FA2F,0xC4B6D4,0xC82F22,0x4E63D9,0xD11CCE,0x575035,0x5BC9C3,0xDD8538
 };
-const double ura_value[]={              /* ura max values */
-    2.4,3.4,4.85,6.85,9.65,13.65,24.0,48.0,96.0,192.0,384.0,768.0,1536.0,
-    3072.0,6144.0
-};
-static const double ura_nominal[]={     /* ura nominal values */
-    2.0,2.8,4.0,5.7,8.0,11.3,16.0,32.0,64.0,128.0,256.0,512.0,1024.0,
-    2048.0,4096.0,8192.0
-};
 /* function prototypes -------------------------------------------------------*/
 #ifdef MKL
 #define LAPACK
@@ -370,6 +368,319 @@ extern void dgetrs_(char *, int *, int *, double *, int *, int *, double *,
 extern int gmf_(double *mjd, double *lat, double *lon, double *hgt, double *zd,
                 double *gmfh, double *gmfw);
 #endif
+
+
+
+extern int myRound(const double dNum)
+{
+	int iNum;
+
+	if (dNum>=0)
+		iNum=(int)(dNum+0.5);
+	else
+		iNum=(int)(dNum-0.5);
+
+	return iNum;
+}
+
+extern double frac(const double dNum)
+{
+	return dNum-myRound(dNum);
+}
+
+extern double erfc(const double x)
+{
+	double di,y=0.0,dt0=100.0,dt;
+	const double dInc=0.005;
+	int iter=0;
+
+	for (di=x;;di-=dInc) {
+		dt=exp(-di*di/2.0)+exp(-(di-dInc)*(di-dInc)/2.0);
+		dt=dt*dInc/2.0;
+
+		y+=dt;
+
+		if (dt<dt0) {
+			iter++;
+		}
+
+		dt0=dt;
+
+		if (dt<1.0e-10&&iter>=200)
+			break;
+	}
+
+	return y/sqrt(2*PI);
+}
+
+extern double pBootStrapping(const double sig)
+{
+	double dRes=0.0;
+
+	dRes=erfc(1.0/(sig*2.0))*2.0-1;
+
+	return dRes;
+}
+
+extern void select_combination(const int l, const int p, const int n, const int m, int *sn)
+{
+	int i;
+
+	if (l==m) {
+		for (i=0;i<m;i++)
+			sn[comb_j*m+i]=rcd[i];
+		comb_j++;
+		return;
+	}
+
+	for (i=p;i<=n-(m-l);i++) {
+		rcd[l]=i+1;
+		select_combination(l+1,i+1,n,m,sn);
+	}
+}
+
+static double calStd_ex(const double *v, const int n, int *bused, double *ave)
+{
+	int i,j;
+	double dave=0.0,std=0.0;
+
+	for (i=j=0;i<n;i++) {
+		if (bused) {
+			if (bused[i]==0) continue;
+		}
+
+		dave+=v[i];
+		j++;
+	}
+
+	if (j<=0) {
+		return -1.0;
+	}
+
+	dave/=j;
+
+	for (i=0;i<n;i++) {
+		if (bused) {
+			if (bused[i]==0) continue;
+		}
+
+		std+=(v[i]-dave)*(v[i]-dave);
+	}
+
+	std=sqrt(std/j);
+
+	if (ave) *ave=dave;
+
+	return std;
+}
+
+static int findGross_(const int nb, double *dv, const int nv, double *std_ex, double *ave_ex, int *ibadsn,
+	                  const double ratio, const double minv, const double minstd)
+{
+	int bbad=0,*bused;
+	int i,j,n,*it,*ibadsn_t;
+	int j0,j9;
+	double dstd_min=1.0e9,dt0=0.0,dt1=0.0,dave_min=0.0;
+
+	if ((nv-nb<=nb)||nv<=0||ratio<=1.0) {
+		if (std_ex)	*std_ex=-1.0;
+		if (ave_ex)	*ave_ex=0.0;
+		return 0;
+	}
+
+	bused=imat(nv,1);
+	ibadsn_t=imat(nv,1);
+
+	for (i=0,n=1;i<nb;i++)
+		n=n*(nv-i)/(i+1);
+
+	if (nb<=0) it=imat(n,1);
+	else       it=imat(n*nb,1);
+
+	comb_j=0;
+	select_combination(0,0,nv,nb,it);
+
+	for (i=0;i<n;i++) {
+		j0=i*nb;
+		j9=j0+nb;
+		for (j=0;j<nv;j++)	bused[j]=1;
+		for (j=j0;j<j9;j++)	bused[it[j]-1]=0;
+
+		dt0=calStd_ex(dv,nv,bused,&dt1);
+
+		if (dt0<dstd_min&&dt0>0.0) {
+			dstd_min=dt0;
+			dave_min=dt1;
+		}
+
+		if (dt0<minstd && dt0>0.0) break;
+	}
+	free(bused); free(it);
+
+	for (i=j=0;i<nv;i++) {
+		bbad=0;
+		dt0=fabs(dv[i]-dave_min);
+		if ( dt0>ratio*dstd_min&&dstd_min>1.0e-8) {
+			if (minv>0.0) {
+				if (fabs(dt0)>minv) bbad=1;
+			}
+			else
+				bbad=1;
+		}
+		if (bbad) {
+			if (j<nv)
+				ibadsn_t[j]=i;
+
+			j++;
+		}
+	}
+	if (ibadsn) {
+		for (i=0;i<j;i++) ibadsn[i]=ibadsn_t[i];
+	}
+
+	if (std_ex) *std_ex=dstd_min;
+	if (ave_ex) *ave_ex=dave_min;
+
+	free(ibadsn_t);
+
+	return j;
+}
+
+extern int findGross(int ppp, int bMulGnss, double *v, const int nv, const int nbad,
+	                 double *std_ex, double *ave_ex, int *ibadsn, const double ratio,
+					 const double minv, const double stdmin)
+{
+	int i,j,badn=0,*ibadsn_t,badn_min=0;
+	double dstd_min=1.0e9,dstd=0.0,dave=0.0,dave_min=0.0;
+	int kk=4;
+
+	if (nv<=1) return 0;
+
+	ibadsn_t=imat(nv,1);
+
+	if (bMulGnss) {
+		kk--;
+	}
+
+	if (kk<=1) kk=1;
+
+	for (i=0;i<=nbad;i++) {
+		if (ppp&&(nv<i+kk||nv<2*i+1)&&i) continue;
+
+		badn=findGross_(i,v,nv,&dstd,&dave,ibadsn_t,ratio,minv,stdmin);
+
+		if (dstd>0.0&&dstd<dstd_min) {
+			dstd_min=dstd;
+			dave_min=dave;
+			badn_min=badn;
+
+			if (ibadsn)
+				for (j=0;j<badn;j++) ibadsn[j]=ibadsn_t[j];
+		}
+
+		if (dstd>0.0&&dstd<=stdmin) break;
+	}
+
+	if (std_ex) *std_ex=dstd_min;
+	if (ave_ex) *ave_ex=dave_min;
+
+	free(ibadsn_t);
+
+	return badn_min;
+}
+
+/*convert number to string */
+extern void num2str(int num, char *str, int len)
+{
+	int i,j=0,n;
+	char tmp[MAXCHARS]={'\0'};
+
+	n=len-(int)(log10((float)num))-1;
+	if (n<0) {
+		tmp[0]='\0';
+		return;
+	}
+
+	for (i=0;i<n;i++) {
+		strcpy(&tmp[j++],"0");
+	}
+	sprintf(str,"%s%d%c",tmp,num,'\0');
+}
+
+/*string clipping*/
+extern void xStrMid (char *szDest, const int nPos, const int nCount, char *szSrc)
+{
+	int i,n;
+	char *str,c;
+
+	n=strlen(szSrc);
+	if (n<=0) return;
+
+	str=szSrc+nPos;
+	for (i=0;i<nCount;i++) {
+		c=*(str+i);
+		if (c) {
+			*(szDest+i)=c;
+		}
+		else {
+			*(szDest+i)='\0';
+			break;
+		}
+	}
+	*(szDest+nCount)	='\0';
+}
+
+extern void trimSpace(char *strsrc)
+{
+	int i=0,j=0,ps,pe;
+    int len=strlen(strsrc);
+    char str[MAXCHARS+1];
+
+    if (len<=0) return;
+
+    str[0]='\0';
+    strcpy(str,strsrc);
+
+    ps=0;
+	for (i=0;i<len;i++) {
+        if (*(str+i)!=' '&&*(str+i)!='\t') {
+            ps=i;
+            break;
+        }
+	}
+
+    pe=ps;
+    for (j=len-1;j>=0;j--) {
+        if (*(str+j)!=' '&&*(str+j)!='\t'&&*(str+j)!='\n') {
+			pe=j;
+            break;
+        }
+    }
+
+	if (pe==ps)
+        *(str+pe)='\0';
+    else
+        *(str+pe+1)='\0';
+
+	strcpy(strsrc,str+ps);
+}
+
+extern void cutFilePathSep(char *strPath)
+{
+	int i,len;
+
+	for (i=0;i<4;i++) {
+		len=strlen(strPath);
+
+		if (len<=0)
+			break;
+
+		if (strPath[len-1]==FILEPATHSEP)
+			strPath[len-1]='\0';
+		else
+			break;
+	}
+}
 
 /* fatal error ---------------------------------------------------------------*/
 static void fatalerr(const char *format, ...)
@@ -522,6 +833,20 @@ extern void satno2id(int sat, char *id)
     }
     strcpy(id,"");
 }
+extern char sys2char(int sys)
+{
+	switch (sys) {
+	case SYS_GPS: return 'G';
+	case SYS_GLO: return 'R';
+	case SYS_GAL: return 'E';
+	case SYS_QZS: return 'J';
+	case SYS_CMP: return 'C';
+	case SYS_IRN: return 'I';
+	case SYS_LEO: return 'L';
+	case SYS_SBS: return ' ';
+	}
+	return ' ';
+}
 /* test excluded satellite -----------------------------------------------------
 * test excluded satellite
 * args   : int    sat       I   satellite number
@@ -567,7 +892,7 @@ extern int testsnr(int base, int freq, double el, double snr,
     double minsnr,a;
     int i;
     
-    if (!mask->ena[base]||freq<0||freq>=NFREQ||snr==0) return 0;
+    if (!mask->ena[base]||freq<0||freq>=NFREQ) return 0;
     
     a=(el*R2D+5.0)/10.0;
     i=(int)floor(a); a-=i;
@@ -600,8 +925,8 @@ extern unsigned char obs2code(const char *obs, int *freq)
 * convert obs code to obs code string
 * args   : unsigned char code I obs code (CODE_???)
 *          int    *freq  IO     frequency (NULL: no output)
-*                               (1:L1/E1/B1, 2:L2/B2, 3:L5/E5a/L3/B3, 4:L6/LEX,
-                                 5:E5b, 6:E5(a+b), 7:S)
+*                               (1:L1/E1, 2:L2/B1, 3:L5/E5a/L3, 4:L6/LEX/B3,
+                                 5:E5b/B2, 6:E5(a+b), 7:S)
 * return : obs code string ("1C","1P","1P",...)
 * notes  : obs codes are based on reference [6] and qzss extension
 *-----------------------------------------------------------------------------*/
@@ -656,7 +981,7 @@ extern int getcodepri(int sys, unsigned char code, const char *opt)
         case SYS_IRN: i=6; optstr="-IL%2s"; break;
         default: return 0;
     }
-    obs=code2obs(code,&j);
+	obs=code2obs(code,&j);
     
     /* parse code options */
     for (p=opt;p&&(p=strchr(p,'-'));p++) {
@@ -1152,18 +1477,14 @@ extern int filter(double *x, double *P, const double *H, const double *v,
     double *x_,*xp_,*P_,*Pp_,*H_;
     int i,j,k,info,*ix;
     
-    /* create list of non-zero states */
     ix=imat(n,1); for (i=k=0;i<n;i++) if (x[i]!=0.0&&P[i+i*n]>0.0) ix[k++]=i;
     x_=mat(k,1); xp_=mat(k,1); P_=mat(k,k); Pp_=mat(k,k); H_=mat(k,m);
-    /* compress array by removing zero elements to save computation time */
     for (i=0;i<k;i++) {
         x_[i]=x[ix[i]];
         for (j=0;j<k;j++) P_[i+j*k]=P[ix[i]+ix[j]*n];
         for (j=0;j<m;j++) H_[i+j*k]=H[ix[i]+j*n];
     }
-    /* do kalman filter state update on compressed arrays */
     info=filter_(x_,P_,H_,v,R,k,m,xp_,Pp_);
-    /* copy values from compressed arrays back to full arrays */
     for (i=0;i<k;i++) {
         x[ix[i]]=xp_[i];
         for (j=0;j<k;j++) P[ix[i]+ix[j]*n]=Pp_[i+j*k];
@@ -1171,6 +1492,36 @@ extern int filter(double *x, double *P, const double *H, const double *v,
     free(ix); free(x_); free(xp_); free(P_); free(Pp_); free(H_);
     return info;
 }
+
+
+extern int filter_fixedamb(double *x, double *P, double *xw, double *Pw, const double *H, const double *v,
+	const double *R, int n, int m)
+{
+	double *x_, *xp_, *P_, *Pp_, *H_;
+	int i, j, k, info, *ix;
+
+	ix = imat(n, 1); for (i = k = 0; i < n; i++) if (x[i] != 0.0 && P[i + i * n] > 0.0) ix[k++] = i;
+	x_ =  mat(k, 1); xp_ = mat(k, 1); P_ = mat(k, k); Pp_ = mat(k, k); H_ = mat(k, m);
+
+	for (i = 0; i < k; i++)
+	{
+		x_[i] = x[ix[i]];
+		for (j = 0; j < k; j++) P_[i + j * k] = P[ix[i] + ix[j] * n];
+		for (j = 0; j < m; j++) H_[i + j * k] = H[ix[i] + j * n];
+	}
+
+	info = filter_(x_, P_, H_, v, R, k, m, xp_, Pp_);
+
+	for (i = 0; i < k; i++)
+	{
+		xw[ix[i]] = xp_[i];
+		for (j = 0; j < k; j++) Pw[ix[i] + ix[j] * n] = Pp_[i + j * k];
+	}
+
+	free(ix); free(x_); free(xp_); free(P_); free(Pp_); free(H_);
+	return info;
+}
+
 /* smoother --------------------------------------------------------------------
 * combine forward and backward filters by fixed-interval smoother as follows:
 *
@@ -2294,7 +2645,7 @@ extern pcv_t *searchpcv(int sat, const char *type, gtime_t time,
     char buff[MAXANT],*types[2],*p;
     int i,j,n=0;
     
-    trace(4,"searchpcv: sat=%2d type=%s\n",sat,type);
+    trace(3,"searchpcv: sat=%2d type=%s\n",sat,type);
     
     if (sat) { /* search satellite antenna */
         for (i=0;i<pcvs->n;i++) {
@@ -2378,8 +2729,8 @@ static int readblqrecord(FILE *fp, double *odisp)
         if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                    v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10)<11) continue;
         for (i=0;i<11;i++) odisp[n+i*6]=v[i];
-        if (++n==6) return 1;
-    }
+		if (++n==6) return 1;
+	}
     return 0;
 }
 /* read blq ocean tide loading parameters --------------------------------------
@@ -2391,34 +2742,92 @@ static int readblqrecord(FILE *fp, double *odisp)
 *-----------------------------------------------------------------------------*/
 extern int readblq(const char *file, const char *sta, double *odisp)
 {
-    FILE *fp;
-    char buff[256],staname[32]="",name[32],*p;
-    
-    /* station name to upper case */
-    sscanf(sta,"%16s",staname);
-    for (p=staname;(*p=(char)toupper((int)(*p)));p++) ;
-    
-    if (!(fp=fopen(file,"r"))) {
-        trace(2,"blq file open error: file=%s\n",file);
+	FILE *fp;
+	char buff[256],staname[32]="",name[32],*p;
+
+	/* station name to upper case */
+	sscanf(sta,"%16s",staname);
+	for (p=staname;(*p=(char)toupper((int)(*p)));p++) ;
+
+	if (!(fp=fopen(file,"r"))) {
+		trace(2,"blq file open error: file=%s\n",file);
         return 0;
-    }
+	}
     while (fgets(buff,sizeof(buff),fp)) {
         if (!strncmp(buff,"$$",2)||strlen(buff)<2) continue;
         
-        if (sscanf(buff+2,"%16s",name)<1) continue;
+		if (sscanf(buff+2,"%16s",name)<1) continue;
         for (p=name;(*p=(char)toupper((int)(*p)));p++) ;
-        if (strcmp(name,staname)) continue;
-        
-        /* read blq record */
-        if (readblqrecord(fp,odisp)) {
-            fclose(fp);
-            return 1;
-        }
-    }
-    fclose(fp);
-    trace(2,"no otl parameters: sta=%s file=%s\n",sta,file);
-    return 0;
+		if (strcmp(name,staname)) continue;
+
+		/* read blq record */
+		if (readblqrecord(fp,odisp))
+		{
+			fclose(fp);
+			return 1;
+		}
+	}
+	fclose(fp);
+	trace(2,"no otl parameters: sta=%s file=%s\n",sta,file);
+	return 0;
 }
+
+
+/* read blq ocean tide loading parameters --------------------------------------
+* read blq ocean tide loading parameters
+* args   : char   *file       I   BLQ ocean tide loading parameter file
+*          char   *sta        I   station name
+*          double *odisp      O   ocean tide loading parameters
+* return : status (1:ok,0:file open error)
+*-----------------------------------------------------------------------------*/
+extern int readblq_pos(const char *file, const double *pos, double *odisp)
+{
+	FILE *fp;
+	char buff[256],staname[32]="",llhstr[80],str[20];
+	int i;
+	double llh[3],r[3],dr[3];
+
+
+	if (!(fp=fopen(file,"r")))
+	{
+		trace(2,"blq file open error: file=%s\n",file);
+        return 0;
+	}
+	while (fgets(buff,sizeof(buff),fp))
+	{
+		if (strlen(buff)<78)       continue;
+
+		strncpy(llhstr,buff+41,36);
+
+		if (strncmp(llhstr,"lon/lat",7)) continue;
+
+		llh[0]=atof(strncpy(str,llhstr+18,10))*D2R;
+		llh[1]=atof(strncpy(str,llhstr+ 8,10))*D2R;
+		llh[2]=atof(strncpy(str,llhstr+28, 8));
+
+		pos2ecef(llh, r);
+
+		dr[0]=pos[0]-r[0];
+		dr[1]=pos[1]-r[1];
+		dr[2]=pos[2]-r[2];
+
+		if (norm(dr,3)<2.0e4)
+		{
+		  if (readblqrecord(fp,odisp))
+		  {
+			fclose(fp);
+			return 1;
+		  }
+		}
+		else
+		  continue;
+
+	}
+	fclose(fp);
+
+	return 0;
+}
+
 /* read earth rotation parameters ----------------------------------------------
 * read earth rotation parameters
 * args   : char   *file       I   IGS ERP file (IGS ERP ver.2)
@@ -2438,7 +2847,8 @@ extern int readerp(const char *file, erp_t *erp)
         trace(2,"erp file open error: file=%s\n",file);
         return 0;
     }
-    while (fgets(buff,sizeof(buff),fp)) {
+	while (fgets(buff,sizeof(buff),fp))
+	{
         if (sscanf(buff,"%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                    v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10,v+11,v+12,v+13)<5) {
             continue;
@@ -2629,36 +3039,6 @@ static void uniqseph(nav_t *nav)
     nav->nsmax=nav->ns;
     
     trace(4,"uniqseph: ns=%d\n",nav->ns);
-}
-/* ura index to ura nominal value (m) ----------------------------------------*/
-extern double uravalue(int sva)
-{
-    return 0<=sva&&sva<15?ura_nominal[sva]:8192.0;
-}
-/* ura value (m) to ura index ------------------------------------------------*/
-extern int uraindex(double value)
-{
-    int i;
-    for (i=0;i<15;i++) if (ura_value[i]>=value) break;
-    return i;
-}
-/* galileo sisa index to sisa nominal value (m) ------------------------------*/
-extern double sisa_value(int sisa)
-{
-    if (sisa<= 49) return sisa*0.01;
-    if (sisa<= 74) return 0.5+(sisa- 50)*0.02;
-    if (sisa<= 99) return 1.0+(sisa- 75)*0.04;
-    if (sisa<=125) return 2.0+(sisa-100)*0.16;
-    return -1.0; /* unknown or NAPA */
-}
-/* galileo sisa value (m) to sisa index --------------------------------------*/
-extern int sisa_index(double value)
-{
-    if (value<0.0 || value>6.0) return 255; /* unknown or NAPA */
-    else if (value<=0.5) return (int)(value/0.01);
-    else if (value<=1.0) return (int)((value-0.5)/0.02)+50;
-    else if (value<=2.0) return (int)((value-1.0)/0.04)+75;
-    return (int)((value-2.0)/0.16)+100;
 }
 /* unique ephemerides ----------------------------------------------------------
 * unique ephemerides in navigation data and update carrier wave length
@@ -2946,14 +3326,13 @@ extern void tracelevel(int level)
 {
     level_trace=level;
 }
-extern int gettracelevel(void)
-{
-    return level_trace;
-}
+/*#define _PRINT_SCREEN_*/
 extern void trace(int level, const char *format, ...)
 {
     va_list ap;
-    
+#ifdef _PRINT_SCREEN_
+	char buffer[255] = { 0 };
+#endif    
     /* print error message to stderr */
     if (level<=1) {
         va_start(ap,format); vfprintf(stderr,format,ap); va_end(ap);
@@ -2963,6 +3342,10 @@ extern void trace(int level, const char *format, ...)
     fprintf(fp_trace,"%d ",level);
     va_start(ap,format); vfprintf(fp_trace,format,ap); va_end(ap);
     fflush(fp_trace);
+#ifdef _PRINT_SCREEN_
+	va_start(ap, format); vsprintf(buffer, format, ap); va_end(ap);
+	printf("%s", buffer);
+#endif
 }
 extern void tracet(int level, const char *format, ...)
 {
@@ -2988,10 +3371,10 @@ extern void traceobs(int level, const obsd_t *obs, int n)
     for (i=0;i<n;i++) {
         time2str(obs[i].time,str,3);
         satno2id(obs[i].sat,id);
-        fprintf(fp_trace," (%2d) %s %-3s rcv%d %13.3f %13.3f %13.3f %13.3f %d %d %d %d %x %x %3.1f %3.1f\n",
+        fprintf(fp_trace," (%2d) %s %-3s rcv%d %13.3f %13.3f %13.3f %13.3f %d %d %d %d %3.1f %3.1f\n",
               i+1,str,id,obs[i].rcv,obs[i].L[0],obs[i].L[1],obs[i].P[0],
               obs[i].P[1],obs[i].LLI[0],obs[i].LLI[1],obs[i].code[0],
-              obs[i].code[1],obs[i].qualL[0],obs[i].qualP[0],obs[i].SNR[0]*0.25,obs[i].SNR[1]*0.25);
+              obs[i].code[1],obs[i].SNR[0]*0.25,obs[i].SNR[1]*0.25);
     }
     fflush(fp_trace);
 }
@@ -3368,7 +3751,7 @@ extern double satwavelen(int sat, int frq, const nav_t *nav)
     int i,sys=satsys(sat,NULL);
     
     if (sys==SYS_GLO) {
-        if (0<=frq&&frq<=1) { /* L1,L2 */
+        if (0<=frq&&frq<=1) {
             for (i=0;i<nav->ng;i++) {
                 if (nav->geph[i].sat!=sat) continue;
                 return CLIGHT/(freq_glo[frq]+dfrq_glo[frq]*nav->geph[i].frq);
@@ -3383,19 +3766,14 @@ extern double satwavelen(int sat, int frq, const nav_t *nav)
         else if (frq==1) return CLIGHT/FREQ2_CMP; /* B2 */
         else if (frq==2) return CLIGHT/FREQ3_CMP; /* B3 */
     }
-    else if (sys==SYS_GAL) {
-        if      (frq==0) return CLIGHT/FREQL1; /* E1 */
-        else if (frq==1) return CLIGHT/FREQE5b; /* E5b */
-        else if (frq==2) return CLIGHT/FREQL5; /* E5a */
-        else if (frq==3) return CLIGHT/FREQE6; /* E6 */
-        else if (frq==5) return CLIGHT/FREQE5ab; /* E5ab */
-    }
-    else { /* GPS,QZS */
-        if      (frq==0) return CLIGHT/FREQL1; /* L1 */
-        else if (frq==1) return CLIGHT/FREQL2; /* L2 */
-        else if (frq==2) return CLIGHT/FREQL5; /* L5 */
-        else if (frq==3) return CLIGHT/FREQE6; /* L6/LEX */
-        else if (frq==6) return CLIGHT/FREQs; /* S */
+    else {
+        if      (frq==0) return CLIGHT/FREQ1; /* L1/E1 */
+        else if (frq==1) return CLIGHT/FREQ2; /* L2 */
+        else if (frq==2) return CLIGHT/FREQ5; /* L5/E5a */
+        else if (frq==3) return CLIGHT/FREQ6; /* L6/LEX */
+        else if (frq==4) return CLIGHT/FREQ7; /* E5b */
+        else if (frq==5) return CLIGHT/FREQ8; /* E5a+b */
+        else if (frq==6) return CLIGHT/FREQ9; /* S */
     }
     return 0.0;
 }
@@ -3448,7 +3826,7 @@ extern double satazel(const double *pos, const double *e, double *azel)
 * return : none
 * notes  : dop[0]-[3] return 0 in case of dop computation error
 *-----------------------------------------------------------------------------*/
-#define SQRT(x)     ((x)<0.0||(x)!=(x)?0.0:sqrt(x))
+
 
 extern void dops(int ns, const double *azel, double elmin, double *dop)
 {
@@ -3726,7 +4104,8 @@ extern void antmodel(const pcv_t *pcv, const double *del, const double *azel,
     e[1]=cos(azel[0])*cosel;
     e[2]=sin(azel[1]);
     
-    for (i=0;i<NFREQ;i++) {
+	for (i=0;i<NFREQ;i++)
+	{
         for (j=0;j<3;j++) off[j]=pcv->off[i][j]+del[j];
         
         dant[i]=-dot(off,e,3)+(opt?interpvar(90.0-azel[1]*R2D,pcv->var[i]):0.0);
@@ -3796,6 +4175,75 @@ static void sunmoonpos_eci(gtime_t tut, double *rsun, double *rmoon)
         
         trace(5,"rmoon=%.3f %.3f %.3f\n",rmoon[0],rmoon[1],rmoon[2]);
     }
+}
+
+/* glonass frequency number -----------------------------------------------
+* get glonass frequency number
+* args   : int    sat       I   satellite number
+*          nav_t  *nav      I   navigation messages
+* return : glonass frequency number (-100: error; -7~6: ok)
+*-----------------------------------------------------------------------------*/
+extern int get_glo_fcn(int sat, const nav_t *nav)
+{
+	int i,sys;
+
+	sys = satsys(sat,NULL);
+	if (sys != SYS_GLO) return -100;
+	for (i=0;i<nav->ng;i++) {
+		if (nav->geph[i].sat != sat) continue;
+		return nav->geph[i].frq;
+	}
+	return -100;
+}
+
+/* ionosphere model ------------------------------------------------------------
+* compute ionospheric delay by broadcast ionosphere model (GPS klobuchar model)
+* args   : gtime_t t        I   time (gpst)
+*          double *ion      I   iono model parameters {a0,a1,a2,a3,b0,b1,b2,b3}
+*          double *pos      I   receiver position {lat,lon,h} (rad,m)
+*          double *azel     I   azimuth/elevation angle {az,el} (rad)
+* return : ionospheric delay (L1) (m)
+*-----------------------------------------------------------------------------*/
+extern double klob_gps(gtime_t t, const double *ion, const double *pos,
+                       const double *azel)
+{
+    const double ion_default[]={ /* 2004/1/1 */
+        0.1118E-07,-0.7451E-08,-0.5961E-07, 0.1192E-06,
+        0.1167E+06,-0.2294E+06,-0.1311E+06, 0.1049E+07
+    };
+    double tt,f,psi,phi,lam,amp,per,x;
+    int week;
+
+    if (pos[2]<-1E3||azel[1]<=0) return 0.0;
+    if (norm(ion,8)<=0.0) ion=ion_default;
+
+    /* earth centered angle (semi-circle) */
+    psi=0.0137/(azel[1]/PI+0.11)-0.022;
+
+    /* subionospheric latitude/longitude (semi-circle) */
+    phi=pos[0]/PI+psi*cos(azel[0]);
+    if      (phi> 0.416) phi= 0.416;
+    else if (phi<-0.416) phi=-0.416;
+    lam=pos[1]/PI+psi*sin(azel[0])/cos(phi*PI);
+
+    /* geomagnetic latitude (semi-circle) */
+    phi+=0.064*cos((lam-1.617)*PI);
+
+    /* local time (s) */
+    tt=43200.0*lam+time2gpst(t,&week);
+    tt-=floor(tt/86400.0)*86400.0; /* 0<=tt<86400 */
+
+    /* slant factor */
+    f=1.0+16.0*pow(0.53-azel[1]/PI,3.0);
+
+    /* ionospheric delay */
+    amp=ion[0]+phi*(ion[1]+phi*(ion[2]+phi*ion[3]));
+    per=ion[4]+phi*(ion[5]+phi*(ion[6]+phi*ion[7]));
+    amp=amp<    0.0?    0.0:amp;
+    per=per<72000.0?72000.0:per;
+    x=2.0*PI*(tt-50400.0)/per;
+
+    return CLIGHT*f*(fabs(x)<1.57?5E-9+amp*(1.0+x*x*(-0.5+x*x/24.0)):5E-9);
 }
 /* sun and moon position -------------------------------------------------------
 * get sun and moon position in ecef
@@ -3933,6 +4381,1666 @@ extern int rtk_uncompress(const char *file, char *uncfile)
     trace(3,"rtk_uncompress: stat=%d\n",stat);
     return stat;
 }
+
+static double sign(double d, double d1)
+{
+	if (d1>0)      return fabs(d);
+	else if (d1<0) return 0-fabs(d);
+	else	           return 0;
+}
+
+extern void getGPT(const double *pos,double dmjd, double *pres, double *temp, double *undu)
+{
+	double V[10][10],W[10][10];
+	int I,N,M,NMAX,MMAX;
+	double DOY,TEMP0,PRES0,APM,APA,ATM,ATA,HORT,X,Y,Z;
+	double DLAT,DLON,DHGT,PRES,TEMP,UNDU;
+	const double TWOPI=6.283185307179586476925287;
+
+	double a_geoid[55] = {
+		-5.6195e-001,-6.0794e-002,-2.0125e-001,-6.4180e-002,-3.6997e-002,
+		+1.0098e+001,+1.6436e+001,+1.4065e+001,+1.9881e+000,+6.4414e-001,
+		-4.7482e+000,-3.2290e+000,+5.0652e-001,+3.8279e-001,-2.6646e-002,
+		+1.7224e+000,-2.7970e-001,+6.8177e-001,-9.6658e-002,-1.5113e-002,
+		+2.9206e-003,-3.4621e+000,-3.8198e-001,+3.2306e-002,+6.9915e-003,
+		-2.3068e-003,-1.3548e-003,+4.7324e-006,+2.3527e+000,+1.2985e+000,
+		+2.1232e-001,+2.2571e-002,-3.7855e-003,+2.9449e-005,-1.6265e-004,
+		+1.1711e-007,+1.6732e+000,+1.9858e-001,+2.3975e-002,-9.0013e-004,
+		-2.2475e-003,-3.3095e-005,-1.2040e-005,+2.2010e-006,-1.0083e-006,
+		+8.6297e-001,+5.8231e-001,+2.0545e-002,-7.8110e-003,-1.4085e-004,
+		-8.8459e-006,+5.7256e-006,-1.5068e-006,+4.0095e-007,-2.4185e-008 };
+		double b_geoid[55]={
+			+0.0000e+000,+0.0000e+000,-6.5993e-002,+0.0000e+000,+6.5364e-002,
+			-5.8320e+000,+0.0000e+000,+1.6961e+000,-1.3557e+000,+1.2694e+000,
+			0.0000e+000,-2.9310e+000,+9.4805e-001,-7.6243e-002,+4.1076e-002,
+			+0.0000e+000,-5.1808e-001,-3.4583e-001,-4.3632e-002,+2.2101e-003,
+			-1.0663e-002,+0.0000e+000,+1.0927e-001,-2.9463e-001,+1.4371e-003,
+			-1.1452e-002,-2.8156e-003,-3.5330e-004,+0.0000e+000,+4.4049e-001,
+			+5.5653e-002,-2.0396e-002,-1.7312e-003,+3.5805e-005,+7.2682e-005,
+			+2.2535e-006,+0.0000e+000,+1.9502e-002,+2.7919e-002,-8.1812e-003,
+			+4.4540e-004,+8.8663e-005,+5.5596e-005,+2.4826e-006,+1.0279e-006,
+			+0.0000e+000,+6.0529e-002,-3.5824e-002,-5.1367e-003,+3.0119e-005,
+			-2.9911e-005,+1.9844e-005,-1.2349e-006,-7.6756e-009,+5.0100e-008
+		};
+		double ap_mean[55]= {
+			+1.0108e+003,+8.4886e+000,+1.4799e+000,-1.3897e+001,+3.7516e-003,
+			-1.4936e-001,+1.2232e+001,-7.6615e-001,-6.7699e-002,+8.1002e-003,
+			-1.5874e+001,+3.6614e-001,-6.7807e-002,-3.6309e-003,+5.9966e-004,
+			+4.8163e+000,-3.7363e-001,-7.2071e-002,+1.9998e-003,-6.2385e-004,
+			-3.7916e-004,+4.7609e+000,-3.9534e-001,+8.6667e-003,+1.1569e-002,
+			+1.1441e-003,-1.4193e-004,-8.5723e-005,+6.5008e-001,-5.0889e-001,
+			-1.5754e-002,-2.8305e-003,+5.7458e-004,+3.2577e-005,-9.6052e-006,
+			-2.7974e-006,+1.3530e+000,-2.7271e-001,-3.0276e-004,+3.6286e-003,
+			-2.0398e-004,+1.5846e-005,-7.7787e-006,+1.1210e-006,+9.9020e-008,
+			+5.5046e-001,-2.7312e-001,+3.2532e-003,-2.4277e-003,+1.1596e-004,
+			+2.6421e-007,-1.3263e-006,+2.7322e-007,+1.4058e-007,+4.9414e-009
+		};
+		double bp_mean[55]= {
+			+0.0000e+000,+0.0000e+000,-1.2878e+000,+0.0000e+000,+7.0444e-001,
+			+3.3222e-001,+0.0000e+000,-2.9636e-001,+7.2248e-003,+7.9655e-003,
+			+0.0000e+000,+1.0854e+000,+1.1145e-002,-3.6513e-002,+3.1527e-003,
+			+0.0000e+000,-4.8434e-001,+5.2023e-002,-1.3091e-002,+1.8515e-003,
+			+1.5422e-004,+0.0000e+000,+6.8298e-001,+2.5261e-003,-9.9703e-004,
+			-1.0829e-003,+1.7688e-004,-3.1418e-005,+0.0000e+000,-3.7018e-001,
+			+4.3234e-002,+7.2559e-003,+3.1516e-004,+2.0024e-005,-8.0581e-006,
+			-2.3653e-006,+0.0000e+000,+1.0298e-001,-1.5086e-002,+5.6186e-003,
+			+3.2613e-005,+4.0567e-005,-1.3925e-006,-3.6219e-007,-2.0176e-008,
+			+0.0000e+000,-1.8364e-001,+1.8508e-002,+7.5016e-004,-9.6139e-005,
+			-3.1995e-006,+1.3868e-007,-1.9486e-007,+3.0165e-010,-6.4376e-010
+		};
+		double ap_amp[55]= {
+			-1.0444e-001,+1.6618e-001,-6.3974e-002,+1.0922e+000,+5.7472e-001,
+			-3.0277e-001,-3.5087e+000,+7.1264e-003,-1.4030e-001,+3.7050e-002,
+			+4.0208e-001,-3.0431e-001,-1.3292e-001,+4.6746e-003,-1.5902e-004,
+			+2.8624e+000,-3.9315e-001,-6.4371e-002,+1.6444e-002,-2.3403e-003,
+			+4.2127e-005,+1.9945e+000,-6.0907e-001,-3.5386e-002,-1.0910e-003,
+			-1.2799e-004,+4.0970e-005,+2.2131e-005,-5.3292e-001,-2.9765e-001,
+			-3.2877e-002,+1.7691e-003,+5.9692e-005,+3.1725e-005,+2.0741e-005,
+			-3.7622e-007,+2.6372e+000,-3.1165e-001,+1.6439e-002,+2.1633e-004,
+			+1.7485e-004,+2.1587e-005,+6.1064e-006,-1.3755e-008,-7.8748e-008,
+			-5.9152e-001,-1.7676e-001,+8.1807e-003,+1.0445e-003,+2.3432e-004,
+			+9.3421e-006,+2.8104e-006,-1.5788e-007,-3.0648e-008,+2.6421e-010
+		};
+		double bp_amp[55]= {
+			+0.0000e+000,+0.0000e+000,+9.3340e-001,+0.0000e+000,+8.2346e-001,
+			+2.2082e-001,+0.0000e+000,+9.6177e-001,-1.5650e-002,+1.2708e-003,
+			+0.0000e+000,-3.9913e-001,+2.8020e-002,+2.8334e-002,+8.5980e-004,
+			+0.0000e+000,+3.0545e-001,-2.1691e-002,+6.4067e-004,-3.6528e-005,
+			-1.1166e-004,+0.0000e+000,-7.6974e-002,-1.8986e-002,+5.6896e-003,
+			-2.4159e-004,-2.3033e-004,-9.6783e-006,+0.0000e+000,-1.0218e-001,
+			-1.3916e-002,-4.1025e-003,-5.1340e-005,-7.0114e-005,-3.3152e-007,
+			+1.6901e-006,+0.0000e+000,-1.2422e-002,+2.5072e-003,+1.1205e-003,
+			-1.3034e-004,-2.3971e-005,-2.6622e-006,+5.7852e-007,+4.5847e-008,
+			+0.0000e+000,+4.4777e-002,-3.0421e-003,+2.6062e-005,-7.2421e-005,
+			+1.9119e-006,+3.9236e-007,+2.2390e-007,+2.9765e-009,-4.6452e-009
+		};
+		double at_mean[55]= {
+			+1.6257e+001,+2.1224e+000,+9.2569e-001,-2.5974e+001,+1.4510e+000,
+			+9.2468e-002,-5.3192e-001,+2.1094e-001,-6.9210e-002,-3.4060e-002,
+			-4.6569e+000,+2.6385e-001,-3.6093e-002,+1.0198e-002,-1.8783e-003,
+			+7.4983e-001,+1.1741e-001,+3.9940e-002,+5.1348e-003,+5.9111e-003,
+			+8.6133e-006,+6.3057e-001,+1.5203e-001,+3.9702e-002,+4.6334e-003,
+			+2.4406e-004,+1.5189e-004,+1.9581e-007,+5.4414e-001,+3.5722e-001,
+			+5.2763e-002,+4.1147e-003,-2.7239e-004,-5.9957e-005,+1.6394e-006,
+			-7.3045e-007,-2.9394e+000,+5.5579e-002,+1.8852e-002,+3.4272e-003,
+			-2.3193e-005,-2.9349e-005,+3.6397e-007,+2.0490e-006,-6.4719e-008,
+			-5.2225e-001,+2.0799e-001,+1.3477e-003,+3.1613e-004,-2.2285e-004,
+			-1.8137e-005,-1.5177e-007,+6.1343e-007,+7.8566e-008,+1.0749e-009
+		};
+		double bt_mean[55]= {
+			+0.0000e+000,+0.0000e+000,+1.0210e+000,+0.0000e+000,+6.0194e-001,
+			+1.2292e-001,+0.0000e+000,-4.2184e-001,+1.8230e-001,+4.2329e-002,
+			+0.0000e+000,+9.3312e-002,+9.5346e-002,-1.9724e-003,+5.8776e-003,
+			+0.0000e+000,-2.0940e-001,+3.4199e-002,-5.7672e-003,-2.1590e-003,
+			+5.6815e-004,+0.0000e+000,+2.2858e-001,+1.2283e-002,-9.3679e-003,
+			-1.4233e-003,-1.5962e-004,+4.0160e-005,+0.0000e+000,+3.6353e-002,
+			-9.4263e-004,-3.6762e-003,+5.8608e-005,-2.6391e-005,+3.2095e-006,
+			-1.1605e-006,+0.0000e+000,+1.6306e-001,+1.3293e-002,-1.1395e-003,
+			+5.1097e-005,+3.3977e-005,+7.6449e-006,-1.7602e-007,-7.6558e-008,
+			+0.0000e+000,-4.5415e-002,-1.8027e-002,+3.6561e-004,-1.1274e-004,
+			+1.3047e-005,+2.0001e-006,-1.5152e-007,-2.7807e-008,+7.7491e-009
+		};
+		double at_amp[55]= {
+			-1.8654e+000,-9.0041e+000,-1.2974e-001,-3.6053e+000,+2.0284e-002,
+			+2.1872e-001,-1.3015e+000,+4.0355e-001,+2.2216e-001,-4.0605e-003,
+			+1.9623e+000,+4.2887e-001,+2.1437e-001,-1.0061e-002,-1.1368e-003,
+			-6.9235e-002,+5.6758e-001,+1.1917e-001,-7.0765e-003,+3.0017e-004,
+			+3.0601e-004,+1.6559e+000,+2.0722e-001,+6.0013e-002,+1.7023e-004,
+			-9.2424e-004,+1.1269e-005,-6.9911e-006,-2.0886e+000,-6.7879e-002,
+			-8.5922e-004,-1.6087e-003,-4.5549e-005,+3.3178e-005,-6.1715e-006,
+			-1.4446e-006,-3.7210e-001,+1.5775e-001,-1.7827e-003,-4.4396e-004,
+			+2.2844e-004,-1.1215e-005,-2.1120e-006,-9.6421e-007,-1.4170e-008,
+			+7.8720e-001,-4.4238e-002,-1.5120e-003,-9.4119e-004,+4.0645e-006,
+			-4.9253e-006,-1.8656e-006,-4.0736e-007,-4.9594e-008,+1.6134e-009
+		};
+		double bt_amp[55]= {
+			+0.0000e+000,+0.0000e+000,-8.9895e-001,+0.0000e+000,-1.0790e+000,
+			-1.2699e-001,+0.0000e+000,-5.9033e-001,+3.4865e-002,-3.2614e-002,
+			+0.0000e+000,-2.4310e-002,+1.5607e-002,-2.9833e-002,-5.9048e-003,
+			+0.0000e+000,+2.8383e-001,+4.0509e-002,-1.8834e-002,-1.2654e-003,
+			-1.3794e-004,+0.0000e+000,+1.3306e-001,+3.4960e-002,-3.6799e-003,
+			-3.5626e-004,+1.4814e-004,+3.7932e-006,+0.0000e+000,+2.0801e-001,
+			+6.5640e-003,-3.4893e-003,-2.7395e-004,+7.4296e-005,-7.9927e-006,
+			-1.0277e-006,+0.0000e+000,+3.6515e-002,-7.4319e-003,-6.2873e-004,
+			-8.2461e-005,+3.1095e-005,-5.3860e-007,-1.2055e-007,-1.1517e-007,
+			+0.0000e+000,+3.1404e-002,+1.5580e-002,-1.1428e-003,+3.3529e-005,
+			+1.0387e-005,-1.9378e-006,-2.7327e-007,+7.5833e-009,-9.2323e-009
+		};
+
+		DLAT=pos[0];
+		DLON=pos[1];
+		DHGT=pos[2];
+
+		DOY=dmjd-44239+1-28;
+		NMAX=MMAX=9;
+
+		X=cos(DLAT)*cos(DLON);
+		Y=cos(DLAT)*sin(DLON);
+		Z=sin(DLAT);
+
+		V[1-1][1-1] = 1.0;
+		W[1-1][1-1] = 0.0;
+		V[2-1][1-1] = Z * V[1-1][1-1];
+		W[2-1][1-1] = 0.0;
+
+		for (N=2;N<=NMAX;N++) {
+			V[N+1-1][1-1] = ((2*N-1) * Z * V[N-1][1-1] - (N-1) * V[N-1-1][1-1]) / N ;
+			W[N+1-1][1-1] = 0.0;
+		}
+
+		for( M=1;M<=NMAX;M++) {
+			V[M+1-1][M+1-1] = (2*M-1) * (X*V[M-1][M-1] - Y*W[M-1][M-1]);
+			W[M+1-1][M+1-1] = (2*M-1) * (X*W[M-1][M-1] + Y*V[M-1][M-1]);
+			if (M < NMAX) {
+				V[M+2-1][M+1-1] = (2*M+1) * Z * V[M+1-1][M+1-1];
+				W[M+2-1][M+1-1] = (2*M+1) * Z * W[M+1-1][M+1-1];
+			}
+			for (N=M+2;N<=NMAX;N++) {
+				V[N+1-1][M+1-1] = ((2*N-1)*Z*V[N-1][M+1-1] - (N+M-1)*V[N-1-1][M+1-1]) / (N-M);
+				W[N+1-1][M+1-1] = ((2*N-1)*Z*W[N-1][M+1-1] - (N+M-1)*W[N-1-1][M+1-1]) / (N-M);
+			}
+		}
+
+		UNDU = 0.0;
+		I = 0;
+
+		for (N=0;N<=NMAX;N++) {
+			for (M=0;M<=N;M++) {
+				I = I+1;
+				UNDU = UNDU + (a_geoid[I-1]*V[N+1-1][M+1-1] + b_geoid[I-1]*W[N+1-1][M+1-1]);
+			}
+		}
+
+		HORT = DHGT - UNDU;
+
+		APM = 0.0;
+		APA = 0.0;
+		I = 0;
+		for (N=0;N<=NMAX;N++) {
+			for (M=0;M<=N;M++) {
+				I = I+1;
+				APM = APM + ( ap_mean[I-1]*V[N+1-1][M+1-1] + bp_mean[I-1]*W[N+1-1][M+1-1] ) ;
+				APA = APA + ( ap_amp[I-1] *V[N+1-1][M+1-1] + bp_amp[I-1] *W[N+1-1][M+1-1] ) ;
+			}
+		}
+
+		PRES0  = APM + APA*cos(DOY/365.25*TWOPI);
+		PRES = PRES0*pow(1.0-0.0000226*HORT, 5.225);
+		ATM = 0.0;
+		ATA = 0.0;
+		I = 0;
+
+		for (N=0;N<=NMAX;N++) {
+			for (M=0;M<=N;M++) {
+				I = I+1;
+				ATM = ATM + (at_mean[I-1]*V[N+1-1][M+1-1] + bt_mean[I-1]*W[N+1-1][M+1-1]);
+				ATA = ATA + (at_amp[I-1] *V[N+1-1][M+1-1] + bt_amp[I-1] *W[N+1-1][M+1-1]);
+			}
+		}
+
+		TEMP0 =  ATM + ATA*cos(DOY/365.25*TWOPI);
+
+		TEMP = TEMP0 - 0.0065*HORT;
+		*pres=PRES;
+		*temp=TEMP;
+		*undu=UNDU;
+
+}
+
+extern void tropmapf_gmf(gtime_t gt, const double blh[3], double elev, double *gmfh, double *gmfw)
+{
+	double dfac[20],P[10][10],aP[55],bP[55],t,dmjd;
+	int i,j,ir,k,n,m,nmax,mmax;
+	double doy,phh;
+	double ah,bh,ch,aw,bw,cw;
+	double ahm,aha,awm,awa;
+	double c10h,c11h,c0h;
+	double a_ht,b_ht,c_ht;
+	double sine,beta,gamma,topcon;
+	double hs_km,ht_corr,ht_corr_coef;
+	double dlat,dlon,dhgt,sum,dt;
+
+	double TWOPI = 6.283185307179586476925287;
+
+	static double ah_mean[55] = {
+		+1.2517e+02,	+8.503e-01,	+6.936e-02,	-6.760e+00, +1.771e-01,
+		+1.130e-02,		+5.963e-01,	+1.808e-02, +2.801e-03, -1.414e-03,
+		-1.212e+00,		+9.300e-02,	+3.683e-03, +1.095e-03, +4.671e-05,
+		+3.959e-01,		-3.867e-02, +5.413e-03, -5.289e-04, +3.229e-04,
+		+2.067e-05,		+3.000e-01, +2.031e-02, +5.900e-03, +4.573e-04,
+		-7.619e-05,		+2.327e-06, +3.845e-06, +1.182e-01, +1.158e-02,
+		+5.445e-03,		+6.219e-05, +4.204e-06, -2.093e-06, +1.540e-07,
+		-4.280e-08,		-4.751e-01, -3.490e-02, +1.758e-03, +4.019e-04,
+		-2.799e-06,		-1.287e-06, +5.468e-07, +7.580e-08, -6.300e-09,
+		-1.160e-01,		+8.301e-03, +8.771e-04, +9.955e-05, -1.718e-06,
+		-2.012e-06,		+1.170e-08, +1.790e-08, -1.300e-09, +1.000e-10
+	};
+
+	static double bh_mean[55] = {
+		+0.000e+00,	+0.000e+00, +3.249e-02, +0.000e+00, +3.324e-02,
+		+1.850e-02, +0.000e+00, -1.115e-01, +2.519e-02, +4.923e-03,
+		+0.000e+00, +2.737e-02, +1.595e-02, -7.332e-04, +1.933e-04,
+		+0.000e+00, -4.796e-02, +6.381e-03, -1.599e-04, -3.685e-04,
+		+1.815e-05, +0.000e+00, +7.033e-02, +2.426e-03, -1.111e-03,
+		-1.357e-04, -7.828e-06, +2.547e-06, +0.000e+00, +5.779e-03,
+		+3.133e-03, -5.312e-04, -2.028e-05, +2.323e-07, -9.100e-08,
+		-1.650e-08, +0.000e+00, +3.688e-02, -8.638e-04, -8.514e-05,
+		-2.828e-05, +5.403e-07, +4.390e-07, +1.350e-08, +1.800e-09,
+		+0.000e+00, -2.736e-02, -2.977e-04, +8.113e-05, +2.329e-07,
+		+8.451e-07, +4.490e-08, -8.100e-09, -1.500e-09, +2.000e-10
+	};
+
+	static double ah_amp[55] = {
+		-2.738e-01, -2.837e+00, +1.298e-02, -3.588e-01, +2.413e-02,
+		+3.427e-02, -7.624e-01, +7.272e-02, +2.160e-02, -3.385e-03,
+		+4.424e-01, +3.722e-02, +2.195e-02, -1.503e-03, +2.426e-04,
+		+3.013e-01, +5.762e-02, +1.019e-02, -4.476e-04, +6.790e-05,
+		+3.227e-05, +3.123e-01, -3.535e-02, +4.840e-03, +3.025e-06,
+		-4.363e-05, +2.854e-07, -1.286e-06, -6.725e-01, -3.730e-02,
+		+8.964e-04, +1.399e-04, -3.990e-06, +7.431e-06, -2.796e-07,
+		-1.601e-07, +4.068e-02, -1.352e-02, +7.282e-04, +9.594e-05,
+		+2.070e-06, -9.620e-08, -2.742e-07, -6.370e-08, -6.300e-09,
+		+8.625e-02, -5.971e-03, +4.705e-04, +2.335e-05, +4.226e-06,
+		+2.475e-07, -8.850e-08, -3.600e-08, -2.900e-09, +0.000e+00
+	};
+
+	static double bh_amp[55] = {
+		+0.000e+00, +0.000e+00, -1.136e-01, +0.000e+00, -1.868e-01,
+		-1.399e-02, +0.000e+00, -1.043e-01, +1.175e-02, -2.240e-03,
+		+0.000e+00, -3.222e-02, +1.333e-02, -2.647e-03, -2.316e-05,
+		+0.000e+00, +5.339e-02, +1.107e-02, -3.116e-03, -1.079e-04,
+		-1.299e-05, +0.000e+00, +4.861e-03, +8.891e-03, -6.448e-04,
+		-1.279e-05, +6.358e-06, -1.417e-07, +0.000e+00, +3.041e-02,
+		+1.150e-03, -8.743e-04, -2.781e-05, +6.367e-07, -1.140e-08,
+		-4.200e-08, +0.000e+00, -2.982e-02, -3.000e-03, +1.394e-05,
+		-3.290e-05, -1.705e-07, +7.440e-08, +2.720e-08, -6.600e-09,
+		+0.000e+00, +1.236e-02, -9.981e-04, -3.792e-05, -1.355e-05,
+		+1.162e-06, -1.789e-07, +1.470e-08, -2.400e-09, -4.000e-10
+	};
+
+	static double aw_mean[55] = {
+		+5.640e+01, +1.555e+00, -1.011e+00, -3.975e+00, +3.171e-02,
+		+1.065e-01, +6.175e-01, +1.376e-01, +4.229e-02, +3.028e-03,
+		+1.688e+00, -1.692e-01, +5.478e-02, +2.473e-02, +6.059e-04,
+		+2.278e+00, +6.614e-03, -3.505e-04, -6.697e-03, +8.402e-04,
+		+7.033e-04, -3.236e+00, +2.184e-01, -4.611e-02, -1.613e-02,
+		-1.604e-03, +5.420e-05, +7.922e-05, -2.711e-01, -4.406e-01,
+		-3.376e-02, -2.801e-03, -4.090e-04, -2.056e-05, +6.894e-06,
+		+2.317e-06, +1.941e+00, -2.562e-01, +1.598e-02, +5.449e-03,
+		+3.544e-04, +1.148e-05, +7.503e-06, -5.667e-07, -3.660e-08,
+		+8.683e-01, -5.931e-02, -1.864e-03, -1.277e-04, +2.029e-04,
+		+1.269e-05, +1.629e-06, +9.660e-08, -1.015e-07, -5.000e-10
+	};
+
+	static double bw_mean[55] = {
+		+0.000e+00, +0.000e+00, +2.592e-01, +0.000e+00, +2.974e-02,
+		-5.471e-01, +0.000e+00, -5.926e-01, -1.030e-01, -1.567e-02,
+		+0.000e+00, +1.710e-01, +9.025e-02, +2.689e-02, +2.243e-03,
+		+0.000e+00, +3.439e-01, +2.402e-02, +5.410e-03, +1.601e-03,
+		+9.669e-05, +0.000e+00, +9.502e-02, -3.063e-02, -1.055e-03,
+		-1.067e-04, -1.130e-04, +2.124e-05, +0.000e+00, -3.129e-01,
+		+8.463e-03, +2.253e-04, +7.413e-05, -9.376e-05, -1.606e-06,
+		+2.060e-06, +0.000e+00, +2.739e-01, +1.167e-03, -2.246e-05,
+		-1.287e-04, -2.438e-05, -7.561e-07, +1.158e-06, +4.950e-08,
+		+0.000e+00, -1.344e-01, +5.342e-03, +3.775e-04, -6.756e-05,
+		-1.686e-06, -1.184e-06, +2.768e-07, +2.730e-08, +5.700e-09
+	};
+
+	static double aw_amp[55] = {
+		+1.023e-01, -2.695e+00, +3.417e-01, -1.405e-01, +3.175e-01,
+		+2.116e-01, +3.536e+00, -1.505e-01, -1.660e-02, +2.967e-02,
+		+3.819e-01, -1.695e-01, -7.444e-02, +7.409e-03, -6.262e-03,
+		-1.836e+00, -1.759e-02, -6.256e-02, -2.371e-03, +7.947e-04,
+		+1.501e-04, -8.603e-01, -1.360e-01, -3.629e-02, -3.706e-03,
+		-2.976e-04, +1.857e-05, +3.021e-05, +2.248e+00, -1.178e-01,
+		+1.255e-02, +1.134e-03, -2.161e-04, -5.817e-06, +8.836e-07,
+		-1.769e-07, +7.313e-01, -1.188e-01, +1.145e-02, +1.011e-03,
+		+1.083e-04, +2.570e-06, -2.140e-06, -5.710e-08, +2.000e-08,
+		-1.632e+00, -6.948e-03, -3.893e-03, +8.592e-04, +7.577e-05,
+		+4.539e-06, -3.852e-07, -2.213e-07, -1.370e-08, +5.800e-09
+	};
+
+	static double bw_amp[55] = {
+		+0.000e+00, +0.000e+00, -8.865e-02, +0.000e+00, -4.309e-01,
+		+6.340e-02, +0.000e+00, +1.162e-01, +6.176e-02, -4.234e-03,
+		+0.000e+00, +2.530e-01, +4.017e-02, -6.204e-03, +4.977e-03,
+		+0.000e+00, -1.737e-01, -5.638e-03, +1.488e-04, +4.857e-04,
+		-1.809e-04, +0.000e+00, -1.514e-01, -1.685e-02, +5.333e-03,
+		-7.611e-05, +2.394e-05, +8.195e-06, +0.000e+00, +9.326e-02,
+		-1.275e-02, -3.071e-04, +5.374e-05, -3.391e-05, -7.436e-06,
+		+6.747e-07, +0.000e+00, -8.637e-02, -3.807e-03, -6.833e-04,
+		-3.861e-05, -2.268e-05, +1.454e-06, +3.860e-07, -1.068e-07,
+		+0.000e+00, -2.658e-02, -1.947e-03, +7.131e-04, -3.506e-05,
+		+1.885e-07, +5.792e-07, +3.990e-08, +2.000e-08, -5.700e-09
+	};
+
+	mjd_t mjd;
+
+	time2mjd(gt,&mjd);
+	dmjd=mjd.day+(mjd.ds.sn+mjd.ds.tos)/86400.0;
+
+	doy=dmjd-44239.0-27;
+
+	dlat=blh[0]; dlon=blh[1]; dhgt=blh[2];
+
+	t=sin(dlat);
+
+	nmax=9;
+	mmax=9;
+
+	dfac[0]=1;
+	for (i=1;i<=2*nmax+1;i++)
+		dfac[i]=dfac[i-1]*i;
+
+	for (i=0;i<=nmax;i++) {
+		for (j=0;j<=MIN(i,mmax);j++) {
+			ir=(int)((i-j)/2);
+			sum=0.0;
+
+			for (k=0;k<=ir;k++) {
+				sum=sum+pow(-1.0,k)*dfac[2*i-2*k]/dfac[k]/dfac[i-k]/dfac[i-j-2*k]*pow(t,i-j-2*k);
+			}
+
+			P[i][j]=1.0/pow(2.0,i)*sqrt(pow(1-t*t,j))*sum;
+		}
+	}
+
+	i=0;
+	for (n=0;n<=9;n++) {
+		for (m=0;m<=n;m++) {
+			i=i+1;
+			dt=m*dlon;
+			aP[i-1]=P[n][m]*cos(dt);
+			bP[i-1]=P[n][m]*sin(dt);
+		}
+	}
+
+	bh=0.0029;
+	c0h=0.062;
+
+	if (dlat<0.0) {	/*southern hemisphere*/
+		phh=PI;
+		c11h=0.007;
+		c10h=0.002;
+	}
+	else {	/*northern hemisphere*/
+		phh=0;
+		c11h=0.005;
+		c10h=0.001;
+	}
+
+	ch=c0h+((cos(doy/365.25*TWOPI+phh)+1.0)*c11h/2.0+c10h)*(1.0-cos(dlat));
+
+	ahm=0.0;
+	aha=0.0;
+	for (i=1;i<=55;i++) {
+		ahm=ahm+(ah_mean[i-1]*aP[i-1]+bh_mean[i-1]*bP[i-1])*1.0e-5;
+		aha=aha+(ah_amp[i-1] *aP[i-1]+bh_amp[i-1] *bP[i-1])*1.0e-5;
+	}
+
+	ah=ahm+aha*cos(doy/365.25*TWOPI);
+
+	sine=sin(elev);
+	beta=bh/(sine+ch);
+	gamma=ah/(sine+beta);
+	topcon=(1.0+ah/(1.0+bh/(1.0+ch)));
+	*gmfh=topcon/(sine+gamma);
+
+	a_ht=2.53e-5;
+	b_ht=5.49e-3;
+	c_ht=1.14e-3;
+	hs_km=dhgt/1000.0;
+
+	beta=b_ht/(sine+c_ht);
+	gamma=a_ht/(sine+beta);
+	topcon=(1.0+a_ht/(1.0+b_ht/(1.0+c_ht)));
+	ht_corr_coef=1.0/sine-topcon/(sine+gamma);
+	ht_corr=ht_corr_coef*hs_km;
+	*gmfh=*gmfh+ht_corr;
+
+	bw=0.00146;
+	cw=0.04391;
+
+	awm=0.0;
+	awa=0.0;
+	for (i=1;i<=55;i++) {
+		awm=awm+(aw_mean[i-1]*aP[i-1]+bw_mean[i-1]*bP[i-1])*1e-5;
+		awa=awa+(aw_amp[i-1] *aP[i-1]+bw_amp[i-1] *bP[i-1])*1e-5;
+	}
+	aw=awm+awa*cos(doy/365.25*TWOPI);
+
+	beta=bw/(sine+cw);
+	gamma=aw/(sine+beta);
+	topcon=(1.0+aw/(1.0+bw/(1.0+cw)));
+	*gmfw=topcon/(sine+gamma);
+}
+
+/*----------------------------------------------------------------------------
+C
+C       NAME	        ECLIPS (version Sep  2011)
+C
+C	PURPOSE 	DETECT ECLIPSING & YAW ROTATE ECLIP. SATELLITES
+C                       (THE INPUT BODY-X UNIT VECTOR - SANTXYZ IS YAW-ROTATED
+C                        BY PHI-YANGLE (THE ECL-NOMINAL) YAW ANGLE DIFFERENCE)
+C
+C       COPYRIGHT       GEODETIC SURVEY DIVISION, 2011.
+C                       ALL RIGHTS RESERVED.
+C                       ALL TERMS AND CONDITIONS APPLY AS DETAILED IN
+C                       " TERMS AND CONDITIONS FOR SOFTWARE "
+C
+C       CONTACT         kouba@geod.nrcan.gc.ca
+C
+C       UPDATE HISTORY: Aug. 23, 2011:1996-2008 W. AVERAGES of JPL REPROCESSING
+C                                YRATE SOLUTIONS FOR ALL II/IIA CODED IN DATA
+C                                STATEMENT, THIS ENABLES REPROCESSING FROM 1996
+C                       Sep 26, 2011: 1. Corrected bug causing Block IIF shadow
+C                               CROSSING MANEVURE WITH 0.06 DEG/SEC RATE EVEN
+C                               FOR BETADG > 8 DEG
+C                                     2. CORRECTED/improved IIA RECOVERY logic
+C
+C	PARAMETERS	DESCRIPTION
+C
+C        IDIR		DIRECTION OF PROCESSING (1=FORWARD, -1=BACKWARD)
+C        IPRN           SV PRN NUMBER (.LE.32 FOR GPS, .GT.32 FOR GLONASS)
+C        TTAG           OBSERVATION EPOCH TIME TAG (EG SEC OF GPS WEEK)
+C        SVBCOS         SV BETA ANGLE (BETWEEN SV AND SUN RADIUS) COSINE			对应论文中的E
+C        ANOON          SV BETA ANGLE LIMIT (DEG) FOR A NOON TURN MANEVURE
+C        ANIGHT         SV BETA ANGLE LIMIT (DEG) FOR A NIGHT SHADOW CROSSING
+C        NECLIPS        NUMBER OF ECLIPSING FOR THE PRN SATELLITE
+C        ECLSTM         ECLIPSE START TIME(EG SEC OF GPS WEEK)
+C        ECLETM         ECLIPSE END TIME  ( "         "      )
+C        IECLIPS        SV ECLIPSING (0=NO,1, 2=YES(1=night, 2=noon))
+C        PI             = PI=3.1415926536D0
+C        XSV(3)         SV X, Y, Z (m)(ITRF)
+C        SANTXYZ        BODY-X UNIT VECTOR (ITRF)
+C                       WARNING: THE IIA BODY-X ORIENTATION EXPECTED FOR THE IIR
+C                        THE  BODY-X REVERSED FOR IIR (SEE BELOW) & RETURNED
+C        VSVC           SV INERTIAL VELOCIRY VECTOR IN ITRF
+C        BETA           90 DEG + THE SUN ANGLE WITH ORBITAL PLANE(IN RAD)
+C        IBLK           SV BLOCK  1=I, 2=II, 3=IIA, IIR=(4, 5) IIF=6
+C
+C        INTERNAL PARAMETRS DESCRIPTION
+C        YANGLE         THE NOMINAL YAW ANGLE
+C        PHI            THE ECLIPSING YAW ANGLE
+C
+C *********************************************************************
+*/
+static int eclips_(int IPRN, double SVBCOS, double ANIGHT, double BETA, double TTAG,
+	               double XSV[3], double SANTXYZ[3], double VSVC[3], int IBLK)
+{
+	int i,j;
+	int IECLIPS;
+	int IDIR=1;
+	double    TWOHR, HALFHR;
+	double    ANOON;
+	double    CNOON, CNIGHT;
+	double    DTR, DTTAG;
+	double    MURATE, YANGLE, DET, BETADG, PHI=0.0, SANTX, SANTY, v[3], r[3];
+	double    YAWEND;
+	double	  ECLSTM, ECLETM;
+	int NOON, NIGHT;
+
+	double YRATE[]= { .1211, .1339,  .123,  .1233,  .1180,  .1266, .1269,
+		.1033, .1278, .0978, 0.200,  0.199,  0.200, 0.0815, .1303,
+		.0838, .1401, .1069,  .098,   .103, 0.1366,  .1025, .1140,
+		.1089, .1001, .1227, .1194,  .1260,  .1228,  .1165, .0969,
+		.1152,
+		0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250,
+		0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250,
+		0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250,
+		0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250, 0.250
+	};
+
+	ECLSTM=ECLETM=-1e6;
+	if( IPRN<=MAXPRNGPS && IBLK>=4 ) YRATE[IPRN-1]=0.2;
+	if( IPRN<=MAXPRNGPS && IBLK>=6 ) YRATE[IPRN-1]=0.11;
+
+	IECLIPS=0;
+
+	TWOHR = 7200.0;
+	HALFHR= 1800.0;
+	DTR=D2R;
+
+	MURATE= sqrt( ( pow(VSVC[1-1],2) + pow(VSVC[2-1],2) + pow(VSVC[3-1],2) ) /
+				  ( pow(XSV[1-1], 2) + pow(XSV[2-1], 2) + pow(XSV[3-1], 2) ) ) / DTR;
+
+	ANOON=atan(MURATE/YRATE[IPRN-1])/DTR;
+
+	CNOON=cos(ANOON*DTR);
+	CNIGHT=cos(ANIGHT*DTR);
+
+	NOON=0;
+	NIGHT=0;
+	BETADG = BETA/DTR - 90.0;
+
+	if ( IPRN>MAXPRNGPS && fabs(BETADG)<ANOON )
+	{
+		YAWEND=75.0;
+		for (j=1;j<=3;j++)
+		{
+			YAWEND=fabs(  atan2( -tan(BETADG*DTR), sin(PI-DTR*MURATE*YAWEND/YRATE[IPRN-1]) ) / DTR
+						- atan2( -tan(BETADG*DTR), sin(PI+DTR*MURATE*YAWEND/YRATE[IPRN-1]) ) / DTR
+				)/2.0;
+		}
+
+		ANOON= MURATE*YAWEND/YRATE[IPRN-1];
+		CNOON= cos(ANOON*DTR);
+	}
+
+	if( IBLK==4 || IBLK==5 ) {
+		CNIGHT=cos((ANOON+180.0)*DTR);
+		for (j=1;j<=3;j++) {
+			SANTXYZ[j-1]=-SANTXYZ[j-1];
+		}
+	}
+
+	if ( SVBCOS < CNIGHT )
+		NIGHT=1;
+
+	if ( SVBCOS > CNOON )
+		NOON=1;
+
+	YANGLE= acos( (SANTXYZ[1-1]*VSVC[1-1] + SANTXYZ[2-1]*VSVC[2-1] + SANTXYZ[3-1]*VSVC[3-1] ) /
+		sqrt( pow(VSVC[1-1],2) + pow(VSVC[2-1],2) + pow(VSVC[3-1],2) )
+		) / DTR;
+
+	if( BETADG<0.0 && IBLK>=4 && IBLK<=5 )
+		YANGLE=-YANGLE;
+	if( BETADG>0.0 && IBLK!=4 && IBLK!=5 )
+		YANGLE=-YANGLE;
+
+	if( (NIGHT || NOON) ) {
+		DET=SQRT( pow(180.0-acos(SVBCOS)/DTR, 2) - pow(BETADG,2) );
+		PHI = PI/2.0;
+
+		if ( NIGHT ) {
+			if (IBLK==4 || IBLK==5) {
+				if ( fabs(YANGLE)>90.0 )	DET=-DET;
+				if ( DET!=0.0 )				PHI=atan2( tan(BETADG*DTR),-sin(-DET*DTR) )/DTR;
+			}
+			else {
+				if ( fabs(YANGLE)<90.0 )	DET=-DET;
+				if ( DET!=0.0 )				PHI=atan2(-tan(BETADG*DTR), sin(-DET*DTR) )/DTR;
+			}
+		}
+		if( NOON ) {
+			DET=SQRT( pow(acos(SVBCOS)*180.0/PI,2) - pow(BETADG,2) );
+
+			if( IBLK==4 || IBLK==5 ) {
+				if ( fabs(YANGLE)<90.0 )	DET=-DET;
+				if ( DET!=0.0 )				PHI=atan2(tan(BETADG*DTR), -sin(PI-DET*DTR))/DTR;
+			}
+			else {
+				if( fabs(YANGLE)>90.0 )		DET=-DET;
+				if( DET!=0.0 )				PHI=atan2(-tan(BETADG*DTR),sin(PI-DET*DTR))/DTR;
+			}
+		}
+
+		if (IDIR > 0 )
+		{
+				ECLSTM=TTAG+DET/MURATE;
+
+				YAWEND=atan(MURATE/YRATE[IPRN-1])/DTR;
+
+				if(((IBLK>3 && IBLK<=5) || NOON) && fabs(BETADG)<YAWEND ) {
+
+					if ( IPRN > MAXPRNGPS ) {
+						ECLSTM = ECLSTM - ANOON/MURATE;
+						ECLETM = ECLSTM + 2.0*ANOON/MURATE;
+					}
+					else {
+						ECLSTM = ECLSTM -   fabs(BETADG)*sqrt(ANOON/fabs(BETADG)-1.0)/MURATE;
+						ECLETM = ECLSTM + 2*fabs(BETADG)*sqrt(ANOON/fabs(BETADG)-1.0)/MURATE;
+					}
+				}
+
+				if ( (IBLK<=3 || IBLK>5) && NIGHT ) {
+					ECLSTM = ECLSTM -     SQRT( pow(ANIGHT-180.0,2) - pow(BETADG,2) )/MURATE;
+					ECLETM = ECLSTM + 2.0*SQRT( pow(ANIGHT-180.0,2) - pow(BETADG,2) )/MURATE;
+				}
+
+				if ( (NIGHT && SVBCOS<CNIGHT) || (NOON && SVBCOS>CNOON) ) {
+					DTTAG= fabs(TTAG-ECLSTM);
+
+					if ( DTTAG>TWOHR ) {
+						ECLSTM=TTAG+DET/MURATE;
+
+						if ((IBLK>3 && IBLK<=5) || NOON) {
+
+							if (IPRN>MAXPRNGPS) {
+								ECLSTM = ECLSTM -     ANOON/MURATE;
+								ECLETM = ECLSTM + 2.0*ANOON/MURATE;
+							}
+							else {
+
+								ECLSTM = ECLSTM -  fabs(BETADG)*sqrt(ANOON/fabs(BETADG)-1.0)/MURATE;
+								ECLSTM = ECLSTM +2*fabs(BETADG)*sqrt(ANOON/fabs(BETADG)-1.0)/MURATE;
+							}
+						}
+					}
+
+					if ( (IBLK<=3||IBLK>5) && NIGHT) {
+
+						ECLSTM = ECLSTM -     SQRT( pow(ANIGHT-180.0,2)-pow(BETADG,2) )/MURATE;
+						ECLSTM = ECLSTM + 2.0*SQRT( pow(ANIGHT-180.0,2)-pow(BETADG,2) )/MURATE;
+					}
+				}
+		}
+	}
+
+		i=0;
+		for ( j=1;j<=1;j++ ) {
+			if ( fabs(ECLETM+1.0e6)<=1.0e-8 && fabs(ECLSTM+1.0e6)<=1.0e-8 )
+				continue;
+
+			if ( TTAG>=ECLSTM && TTAG<=(ECLETM+HALFHR) )
+				i=j;
+		}
+
+		if ( 0==i ) return IECLIPS;
+
+		if ( TTAG>=ECLSTM && TTAG<=(ECLETM+HALFHR) ) {
+
+			for ( j=1;j<=3;j++ ) {
+				v[j-1]=VSVC[j-1]/SQRT( pow(VSVC[1-1],2)+pow(VSVC[2-1],2)+pow(VSVC[3-1],2) );
+				r[j-1]=XSV[j-1] /SQRT( pow(XSV[1-1], 2)+pow(XSV[2-1], 2)+pow(XSV[3-1], 2) );
+			}
+
+			DET= MURATE*(ECLETM-ECLSTM)/2.0;
+			if (SVBCOS < 0) {
+
+				if ( IPRN<=MAXPRNGPS && (IBLK<=3||IBLK>5) ) {
+					if ( TTAG<=ECLETM ) {
+
+						if ( IBLK<=3 )  PHI=atan2(-tan(BETADG*DTR), sin(-DET*DTR))/DTR + sign(YRATE[IPRN-1],0.50)*(TTAG-ECLSTM);
+						if ( IBLK>5 )   PHI=atan2(-tan(BETADG*DTR), sin(-DET*DTR))/DTR + sign(0.060, BETADG)*(TTAG-ECLSTM);
+					}
+					else {
+
+						if ( IBLK<=3 )  PHI=atan2(-tan(BETADG*DTR), sin(-DET*DTR))/DTR + sign(YRATE[IPRN-1],0.50)*(ECLETM-ECLSTM);
+
+						if ( IBLK>5 )   PHI=atan2(-tan(BETADG*DTR), sin(-DET*DTR))/DTR + sign(0.060, BETADG)*(ECLETM-ECLSTM);
+
+						YAWEND= YANGLE- PHI;
+						YAWEND= fmod(YAWEND, 360.0);
+						if ( fabs(YAWEND)>180.0) YAWEND= YAWEND-360.0*YAWEND/fabs(YAWEND);
+						PHI=PHI + sign(YRATE[IPRN-1],YAWEND)*(TTAG-ECLETM);
+
+						SANTX= YANGLE-PHI;
+						SANTX = fmod(SANTX , 360.0);
+						if ( fabs(SANTX)>180.0) SANTX = SANTX -360.0* SANTX /fabs(SANTX );
+
+						if ( fabs(SANTX)>fabs(YAWEND) ) return IECLIPS;
+						if ( YAWEND!=0.0 && ((SANTX)/YAWEND)<0.0) return IECLIPS;
+
+						PHI= fmod(PHI, 360.0);
+						if ( fabs(PHI)>180.0) PHI= PHI-360.0*PHI/fabs(PHI);
+					}
+				}
+
+				if( IPRN>MAXPRNGPS ) {
+
+					if ( TTAG>ECLETM ) return IECLIPS;
+					YAWEND=YRATE[IPRN-1];
+					PHI=atan2(-tan(BETADG*DTR), sin(-DET*DTR))/DTR + sign(YAWEND,BETADG)*(TTAG-ECLSTM);
+
+					YAWEND=atan2(-tan(BETADG*DTR), sin( DET*DTR))/DTR;
+
+					if ((YAWEND/PHI)>=1.0 || (PHI/YAWEND)<0.0)
+						PHI = YAWEND;
+				}
+
+				if ( IPRN<=MAXPRNGPS && IBLK>5 )
+
+					if ( fabs(BETADG)>8.0) return IECLIPS;
+
+				if ( IBLK>3 && IBLK<=5) {
+
+					PHI=atan2( tan(BETADG*DTR),-sin(-DET*DTR))/DTR + sign(YRATE[IPRN-1],BETADG)*(TTAG-ECLSTM);
+					if( (PHI/YANGLE)>=1.0 || (PHI/YANGLE)<0.0) return IECLIPS;
+				}
+
+				IECLIPS=1;
+			}
+			else {
+
+				PHI=atan2(-tan(BETADG*DTR),sin(PI-DET*DTR))/DTR -sign(YRATE[IPRN-1],BETADG)*(TTAG-ECLSTM);
+				if ( IBLK>3 && IBLK<=5 ) {
+
+					PHI=atan2( tan(BETADG*DTR),-sin(PI-DET*DTR))/DTR -sign(YRATE[IPRN-1],BETADG)*(TTAG-ECLSTM);
+
+					if ( (YANGLE/PHI)>=1.0 || (PHI/YANGLE)<0.0) return IECLIPS;
+				}
+				else {
+
+					if ( IPRN>MAXPRNGPS && TTAG>ECLETM ) return IECLIPS;
+					if ( IPRN<=MAXPRNGPS && ((PHI/YANGLE)>=1.0 || (PHI/YANGLE)<0.0)) return IECLIPS;
+				}
+
+				IECLIPS=2;
+			}
+
+			SANTX=(cos((PHI-YANGLE)*DTR)*(v[2-1]-v[3-1]*r[2-1]/r[3-1])-cos(PHI*DTR)*(SANTXYZ[2-1]-SANTXYZ[3-1]*r[2-1])/r[3-1])/(SANTXYZ[1-1]*v[2-1]-SANTXYZ[2-1]*v[1-1])
+				+((SANTXYZ[2-1]*v[3-1]-SANTXYZ[3-1]*v[2-1])*r[1-1]+(SANTXYZ[3-1]*v[1-1]-SANTXYZ[1-1]*v[3-1])*r[2-1])/r[3-1];
+			SANTY = (cos(PHI*DTR) - (v[1-1]-v[3-1]*r[1-1]/r[3-1])*SANTX)/(v[2-1]-v[3-1]*r[2-1]/r[3-1]);
+
+			SANTXYZ[1-1]= SANTX;
+			SANTXYZ[2-1]= SANTY;
+			SANTXYZ[3-1]= (-r[1-1]*SANTX-r[2-1]*SANTY)/r[3-1];
+		}
+
+	return IECLIPS;
+}
+
+extern int calEclips(int prn, double *satp, const double *satv, double *sunp,
+					 double TTAG, double SANTXYZ[3], const nav_t *nav)
+{
+	double SVBCOS,BETA=0.0,eSunP[3],eSatP[3],eSatV[3],vec[3],ANIGHT,satv_[3];
+	double angleLmt;
+	const char *type;
+	int IBLK=-1;
+
+	if (prn>MAXPRNGPS+MAXPRNGLO) return 0;
+
+	type=nav->pcvs[prn-1].type;
+
+	if (type)
+	{
+		if      (strstr(type, "BLOCK I      "))	IBLK=1;
+		else if (strstr(type, "BLOCK II     "))	IBLK=2;
+		else if (strstr(type, "BLOCK IIA    "))	IBLK=3;
+		else if (strstr(type, "BLOCK IIR-B  "))	IBLK=4;
+		else if (strstr(type, "BLOCK IIR-M  "))	IBLK=5;
+		else if (strstr(type, "BLOCK IIF    "))	IBLK=6;
+	}
+
+	if (prn>MAXPRNGPS) IBLK=6;
+
+	satv_[0]=satv[0]-OMGE*satp[1];
+	satv_[1]=satv[1]+OMGE*satp[0];
+	satv_[2]=satv[2];
+
+	normv3(satp,eSatP);
+	normv3(satv_,eSatV);
+	normv3(sunp,eSunP);
+
+	SVBCOS=dot(eSatP,eSunP,3);
+
+	cross3(eSatP,eSatV,vec);
+
+	BETA=dot(vec,eSunP,3);
+	BETA=acos(BETA);
+	BETA=-BETA+PI;
+
+	angleLmt=76.116;
+
+	ANIGHT=90+angleLmt-1.5;
+
+	return eclips_(prn,SVBCOS,ANIGHT,BETA,TTAG,satp,SANTXYZ,satv_,IBLK);
+}
+
+extern int lsqPlus(const double *A, const double *y, const int nx, const int nv, double *x, double *Q)
+{
+	int i,j,k,info=0;
+	int *ix;
+	double *A_,*x_,*Q_;
+
+	ix=imat(nx,1);
+
+	for (i=k=0;i<nx;i++) {
+		for (j=0;j<nv;j++) {
+			if (fabs(A[j*nx+i])>1.0e-10) {
+				ix[k++]=i;
+				j=1000;
+			}
+		}
+	}
+
+	A_=mat(k*nv,1); x_=mat(k,1); Q_=mat(k*k,1);
+
+	for (j=0;j<k;j++) {
+		for (i=0;i<nv;i++) {
+			A_[i*k+j]=A[i*nx+ix[j]];
+		}
+
+		x_[j]=x[ix[j]];
+	}
+
+	/* least square estimation */
+	info=lsq(A_,y,k,nv,x_,Q_);
+
+	for (i=0;i<nx*nx;i++) Q[i]=0.0;
+
+	for (i=0;i<nx;i++) x[i]=0.0;
+
+	for (i=0;i<k;i++) {
+		x[ix[i]]=x_[i];
+
+		for (j=0;j<k;j++)
+			Q[ix[i]+ix[j]*nx]=Q_[i+j*k];
+	}
+
+	free(ix); free(A_); free(x_); free(Q_);
+
+	return info;
+}
+
+extern double sagnac(const double *rs, const double *rr)
+{
+	return OMGE*(rs[0]*rr[1]-rs[1]*rr[0])/CLIGHT;
+}
+
+/*calculate threshold values for cycle slip detection */
+extern int calCsThres(prcopt_t *opt, const double sample)
+{
+	int b=0;
+
+	if (sample>0.0)
+	{
+		if (opt->prcOpt_Ex.bUsed_gfCs==1&&fabs(opt->prcOpt_Ex.csThresGF)<0.01) {
+			if (sample<=1.0)        opt->prcOpt_Ex.csThresGF=0.05;
+			else if (sample<=20.0)  opt->prcOpt_Ex.csThresGF=(0.10)/(20.0-0.0)*sample+0.05;
+			else if (sample<=60.0)  opt->prcOpt_Ex.csThresGF=0.15;
+			else if (sample<=100.0) opt->prcOpt_Ex.csThresGF=0.25;
+			else                    opt->prcOpt_Ex.csThresGF=0.35;
+
+			b=1;
+		}
+		if (opt->prcOpt_Ex.bUsed_mwCs==1&&fabs(opt->prcOpt_Ex.csThresMW)<0.01) {
+			if (sample<=1.0)        opt->prcOpt_Ex.csThresMW=2.5;
+			else if (sample<=20.0)  opt->prcOpt_Ex.csThresMW=(2.5)/(20.0-0.0)*sample+2.5;
+			else if (sample<=60.0)  opt->prcOpt_Ex.csThresMW=5.0;
+			else                    opt->prcOpt_Ex.csThresMW=7.5;
+
+			b=1;
+		}
+
+		return b;
+	}
+	else
+	{
+		opt->prcOpt_Ex.csThresGF=0.15;
+		opt->prcOpt_Ex.csThresMW=5.0;
+		b=0;
+	}
+
+	return b;
+}
+
+/*pseudorange observation checking*/
+extern void obsScan_SPP(const prcopt_t *popt, obsd_t *obs, const int nobs, int *nValid)
+{
+	double dt;
+	int i,j,n,sat,sys;
+
+	for (i=n=0;i<nobs;i++) {
+		sat=obs[i].sat;
+		sys=popt->sFlag[sat-1].sys;
+
+		if (!(sys&popt->navsys)) continue;
+		if (popt->exsats[sat-1])	 continue;
+
+		dt=0.0;
+		for (j=0;j<NFREQ;j++) {
+			dt+=obs[i].P[j]*obs[i].P[j];
+		}
+		if (dt==0.0)	 continue;
+
+		obs[n++]=obs[i];
+	}
+
+	if (nValid) *nValid=n;
+}
+extern void obsScan_PPP(const prcopt_t *popt, obsd_t *obs, const int nobs, int *nValid)
+{
+	int i,n,sat,f2;
+
+	for (i=n=0;i<nobs&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+
+		f2=1;
+		if (popt->mode>=PMODE_PPP_KINEMA)
+		{
+			if (obs[i].L[0]==0.0 && obs[i].L[f2]==0.0)
+			{
+			   if (NFREQ>=3&&(popt->sFlag[sat-1].sys&(SYS_GAL|SYS_SBS)))
+			   {
+				  f2=2;
+				  if (obs[i].L[0]*obs[i].L[f2]==0.0)
+					continue;
+			   }
+			   else
+					continue;
+
+			}
+		}
+		/*
+		if (fabs(obs[i].P[0]-obs[i].P[f2])>=200.0)
+		{
+			 if (NFREQ>=3&&(popt->sFlag[sat-1].sys&(SYS_GAL|SYS_SBS)))
+			 {
+				 f2=2;
+				 if (fabs(obs[i].P[0]-obs[i].P[f2])>=200.0)
+					continue;
+			 }
+			 else
+			   continue;
+		}
+         */
+		obs[n]=obs[i];
+		n++;
+	}
+
+	if (nValid) *nValid=n;
+}
+
+/* mutipath correct-------------------------------------------------------------
+* BeiDou satellite-induced code pseudorange variations correct
+* args   : rtk_t *rtk       IO  rtk control/result struct
+           obsd_t *obs      IO  observation data
+           int    n         I   number of observation data
+		   nav_t  *nav      I   navigation messages
+* note   :
+*
+* -----------------------------------------------------------------------------*/
+extern void BDmultipathCorr(rtk_t *rtk, obsd_t *obs, int n)
+{
+	int i,j,sat,prn,b;
+	double dmp[3],elev,a;
+	const static double IGSOCOEF[3][10]=
+	{		/* m */
+		{-0.55,-0.40,-0.34,-0.23,-0.15,-0.04,0.09,0.19,0.27,0.35},
+		{-0.71,-0.36,-0.33,-0.19,-0.14,-0.03,0.08,0.17,0.24,0.33},
+		{-0.27,-0.23,-0.21,-0.15,-0.11,-0.04,0.05,0.14,0.19,0.32},
+	};
+	const static double MEOCOEF[3][10]=
+	{		/* m */
+		{-0.47,-0.38,-0.32,-0.23,-0.11,0.06,0.34,0.69,0.97,1.05},
+		{-0.40,-0.31,-0.26,-0.18,-0.06,0.09,0.28,0.48,0.64,0.69},
+		{-0.22,-0.15,-0.13,-0.10,-0.04,0.05,0.14,0.27,0.36,0.47},
+	};
+
+	for (i=0;i<n&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+		if (rtk->opt.sFlag[sat-1].sys!=SYS_CMP) continue;
+
+		prn=rtk->opt.sFlag[sat-1].prn;
+		if (prn<=5) continue;
+
+		elev=rtk->ssat[sat-1].azel[1]*R2D;
+
+		if (elev<=0.0) continue;
+
+		for (j=0;j<3;j++) dmp[j]=0.0;
+
+		a=elev*0.1;
+		b=(int)a;
+
+		if (prn>=6&&prn<11)
+		{
+			if (b<0)
+			{
+				for (j=0;j<3;j++) dmp[j]=IGSOCOEF[j][0];
+			}
+			else if (b>=9)
+			{
+				for (j=0;j<3;j++) dmp[j]=IGSOCOEF[j][9];
+			}
+			else
+			{
+				for (j=0;j<3;j++) dmp[j]=IGSOCOEF[j][b]*(1.0-a+b)+IGSOCOEF[j][b+1]*(a-b);
+			}
+		}
+		else if (prn>=11)
+		{
+			if (b<0)
+			{
+				for (j=0;j<3;j++) dmp[j]=MEOCOEF[j][0];
+			}
+			else if (b>=9)
+			{
+				for (j=0;j<3;j++) dmp[j]=MEOCOEF[j][9];
+			}
+			else
+			{
+				for (j=0;j<3;j++) dmp[j]=MEOCOEF[j][b]*(1.0-a+b)+MEOCOEF[j][b+1]*(a-b);
+			}
+		}
+
+		for (j=0;j<3;j++) obs[i].P[j]+=dmp[j];
+	}
+}
+
+/* L1/L2 wide-lane phase measurement -----------------------------------------*/
+extern double wlAmbMeas(const obsd_t *obs, const nav_t *nav)
+{
+	int sys,i=0,j=1;
+	const double *lam=nav->lam[obs->sat-1];
+	double P1,P2,P1_C1,P2_C2,lam1,lam2,res;
+
+	sys=satsys(obs->sat,NULL);
+
+	if (sys==SYS_GAL)
+		j=2;
+
+	if (obs->L[i]==0.0) return 0.0;
+	if (obs->L[j]==0.0) return 0.0;
+	if (obs->P[i]==0.0) return 0.0;
+	if (obs->P[j]==0.0) return 0.0;
+	if (lam[i]*lam[j]==0.0) return 0.0;
+
+	P1=obs->P[i];
+	P2=obs->P[j];
+	P1_C1=nav->cbias[obs->sat-1][1];
+	P2_C2=nav->cbias[obs->sat-1][2];
+
+	if (obs->code[0]==CODE_L1C) P1+=P1_C1; /* C1->P1 */
+	if (obs->code[1]==CODE_L2C) P2+=P2_C2; /* C2->P2 */
+
+	lam1=lam[i];
+	lam2=lam[j];
+	res=(obs->L[i]-obs->L[j])-(lam2-lam1)/(lam1+lam2)*(P1/lam1+P2/lam2);
+
+	return res;
+}
+
+/* detect cycle slip by widelane jump -----------------------------*/
+static void detslp_mw(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
+{
+	int i,j,nd=0,sat;
+	int bSlip[MAXSAT],bLowElev=0;
+	double wl0,wl1,elev,el,thres,thres0,delta[50],dmw[MAXSAT],dtmp,fact;
+	double std_ex,ave_ex;
+	const double rad_20=20.0*D2R;
+
+	for (i=0;i<MAXSAT;i++)
+	{
+		dmw[i]=0.0;
+		bSlip[i]=0;
+	}
+
+	/*the thresh values is suitable for 30s interval*/
+	fact=2.0;
+	if (rtk->opt.sample>=29.5)
+	{
+		if      (rtk->opt.delEp<=2) fact=1.00;
+		else if (rtk->opt.delEp<=4) fact=1.25;
+		else if (rtk->opt.delEp<=6) fact=1.50;
+		else	                    fact=2.00;
+	}
+
+	for (i=0;i<n&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+		if (timediff(rtk->opt.tNow,rtk->opt.ssat_Ex[sat-1].tLast)>rtk->opt.sample)
+		{
+			rtk->opt.ssat_Ex[sat-1].mw[1]=0.0;
+			rtk->opt.ssat_Ex[sat-1].mwIndex=0;
+		}
+
+		wl1=wlAmbMeas(obs+i,nav);
+		wl0=rtk->opt.ssat_Ex[sat-1].mw[1];
+
+		if (nav->upd_from)
+		{
+		   rtk->pppar.m_upd.wlbias[sat-1]=-nav->wlbias[sat-1];
+		}
+		else
+		{
+			rtk->pppar.m_upd.wlbias[sat-1]=0.0;
+		}
+
+		sprintf(rtk->opt.chMsg,"sat=%s, mw0=%13.3f, mw1=%13.3f\n",rtk->opt.sFlag[sat-1].id,wl1,
+			rtk->opt.ssat_Ex[sat-1].mw[1]);
+
+		if ( wl0==0.0 )  			rtk->opt.ssat_Ex[sat - 1].mw[1] = wl1;
+		if ( wl1 == 0.0 || wl0 == 0.0)  continue;
+
+		elev=rtk->ssat[sat-1].azel[1];
+		el=elev;
+
+		bLowElev=0;
+
+		if (elev<rtk->opt.elmin)
+		{
+			el=rtk->opt.elmin;
+			bLowElev=1;
+		}
+
+		dtmp=el*R2D;
+
+		if (el>=rad_20) thres=rtk->opt.prcOpt_Ex.csThresMW;
+		else	 thres=-rtk->opt.prcOpt_Ex.csThresMW*0.1*dtmp+3*rtk->opt.prcOpt_Ex.csThresMW;
+
+		dmw[sat-1]=wl1-wl0;
+
+		thres0=MIN(thres*fact,6.0);
+
+		if (fabs(wl1-wl0)>6.0)
+		{
+			bSlip[sat-1]=1;
+			delta[nd++]=wl1-wl0;
+
+			if (bLowElev) continue;
+
+			sprintf(rtk->opt.chMsg, "%s MW CS mw_new=%13.3f, mw_old=%13.3f, diff_abs=%13.3f, thres=%13.3f, elev=%4.1f\n",
+				rtk->opt.sFlag[sat-1].id,wl1,wl0,wl1-wl0,thres0,elev);
+
+			rtk->opt.ssat_Ex[sat-1].mw[1]=wl1;
+			rtk->opt.ssat_Ex[sat-1].mwIndex=1;
+		}
+	}
+
+	if (2*nd+1<=n&&nd<n-3&&nd<=3)
+	{
+
+	}
+	else if (nd>2)
+	{
+		i=findGross(0,0,delta,nd,0,&std_ex,&ave_ex,NULL,4.0,0.3,0.2);
+
+		if (i<=1&&std_ex<=1.0&&fabs(ave_ex)<=10.0 )
+		{
+			sprintf(rtk->opt.chMsg,"*** WARNING: MW CS abnormally at this epoch %4.1f  %4.2f %d %d\n",ave_ex,std_ex,nd,n);
+
+			for (i=0;i<n&&i<MAXOBS;i++)
+			{
+				sat=obs[i].sat;
+				dmw[sat-1]=0.0;
+				bSlip[sat-1]=0;
+			}
+		}
+	}
+
+	for (i=0;i<n&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+
+		if (!bSlip[sat-1])
+		{
+			if (fabs(dmw[sat-1])>=1.0)
+				rtk->opt.ssat_Ex[sat-1].obsStat.iCycle=1;
+		}
+		else {
+			for (j=0;j<rtk->opt.nf;j++)
+				rtk->ssat[sat-1].slip[j]|=1;
+
+			rtk->opt.ssat_Ex[sat-1].obsStat.iCycle=2;
+		}
+	}
+}
+/* geometry-free phase measurement -------------------------------------------*/
+extern double gfmeas(const obsd_t *obs, const nav_t *nav)
+{
+	const double *lam = nav->lam[obs->sat - 1];
+	int i = (satsys(obs->sat, NULL)&(SYS_GAL | SYS_SBS)) ? 2 : 1;
+
+	if (lam[0] == 0.0 || lam[i] == 0.0 || obs->L[0] == 0.0 || obs->L[i] == 0.0) return 0.0;
+	return lam[0] * obs->L[0] - lam[i] * obs->L[i];
+}
+
+/* detect cycle slip by geometry free phase jump -----------------------------*/
+static void detslp_gf(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
+{
+	double g0,g1,elev,thres=0.0,deltaEpoch=1.0;
+	double elev0,thres0;
+	int i,j,sat;
+
+	deltaEpoch=fabs(rtk->tt/rtk->opt.sample);
+
+	for (i=0;i<n&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+		elev=rtk->ssat[sat-1].azel[1]*R2D;
+		elev0=elev;
+
+		g1=gfmeas(obs+i,nav);
+
+		if (g1==0.0) continue;
+
+		if (elev<rtk->opt.elmin*R2D) elev=rtk->opt.elmin*R2D;
+
+
+		if (elev>=15.0) thres=rtk->opt.prcOpt_Ex.csThresGF;
+		else thres=-rtk->opt.prcOpt_Ex.csThresGF/15.0*elev+2*rtk->opt.prcOpt_Ex.csThresGF;
+
+		g0=rtk->ssat[sat-1].gf;
+
+		thres0=MIN(2*thres*deltaEpoch,3);
+		if (g0!=0.0&&fabs(g1-g0)>MIN(thres*deltaEpoch,3))
+		{
+			for (j=0;j<rtk->opt.nf;j++)
+				rtk->ssat[sat-1].slip[j]|=1;
+
+			sprintf(rtk->opt.chMsg,"%s GF CS gf_new=%13.3f, gf_old=%13.3f, diff_abs=%13.3f, thres=%13.3f, elev=%4.1f\n",
+				rtk->opt.sFlag[sat-1].id,g1,g0,g1-g0,thres0,elev0);
+		}
+	}
+}
+
+extern void detecs(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
+{
+	int i,j,b1,b2;
+	double dt;
+
+	for (i=0;i<MAXSAT;i++) for (j=0;j<rtk->opt.nf;j++)
+	{
+		rtk->ssat[i].slip[j]=0;
+	}
+
+	dt=1.0;
+
+	if (rtk->opt.sample>0.0) dt=fabs(rtk->tt/rtk->opt.sample);
+	rtk->opt.delEp=myRound(dt);
+
+	if (rtk->opt.sample<=1.5)
+	{
+		if      (fabs(rtk->tt)<=10.0) rtk->opt.delEp=1;
+		else if (fabs(rtk->tt)<=15.0) rtk->opt.delEp=2;
+		else if (fabs(rtk->tt)<=22.0) rtk->opt.delEp=3;
+	}
+
+	if (rtk->opt.delEp<=0)
+	{
+		b1=(rtk->opt.iEpoch==1)&&(rtk->opt.revs==0) ;
+		b2=(rtk->opt.nEpoch-1==rtk->opt.iEpoch)&&(rtk->opt.revs==1) ;
+
+		rtk->opt.delEp=1;
+	}
+
+	/* detect slip by Melbourne-Wubbena linear combination jump */
+	if (rtk->opt.prcOpt_Ex.bUsed_mwCs) detslp_mw(rtk,obs,n,nav);
+
+	/* detect cycle slip by geometry-free phase jump */
+	if (rtk->opt.prcOpt_Ex.bUsed_gfCs) detslp_gf(rtk,obs,n,nav);
+}
+
+/*save the information of current epoch*/
+extern void keepEpInfo(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
+{
+	int i,j,sat;
+	prcopt_t *opt=&rtk->opt;
+	double wl0,wl1,var0,var1,gf;
+
+	for (i=0;i<MAXSAT;i++)
+	{
+		rtk->ssat[i].gf=0.0;
+		rtk->opt.ssat_Ex[i].mw[0]=0.0;
+	}
+
+	for (i=0;i<n&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+
+		rtk->opt.ssat_Ex[sat-1].tLast=rtk->opt.tNow;
+
+		if ((gf=gfmeas(obs+i,nav))!=0.0)
+			rtk->ssat[sat-1].gf=gf;
+
+		if ((wl1=wlAmbMeas(obs+i,nav))==0.0)
+			continue;
+
+		wl0=rtk->opt.ssat_Ex[sat-1].mw[1];
+		rtk->opt.ssat_Ex[sat-1].mw[0]=wl1;
+
+		if (rtk->opt.ssat_Ex[sat-1].mwIndex>0)
+		{
+			j   =rtk->opt.ssat_Ex[sat-1].mwIndex;
+			var0=rtk->opt.ssat_Ex[sat-1].mwVar_c;
+			var1=(wl1-wl0)*(wl1-wl0)-var0;
+			var1=var0 + var1/j;
+			rtk->opt.ssat_Ex[sat-1].mw[1]=(wl0*j+wl1)/(j+1);
+			rtk->opt.ssat_Ex[sat-1].mwIndex++;
+			rtk->opt.ssat_Ex[sat-1].mwVar_c=var1;
+
+
+		}
+		else
+		{
+			rtk->opt.ssat_Ex[sat-1].mw[1]=wl1;
+			rtk->opt.ssat_Ex[sat-1].mwIndex++;
+			rtk->opt.ssat_Ex[sat-1].mwVar_c=0.25;
+		}
+
+		j=IB(sat,0,opt);
+
+		rtk->opt.ssat_Ex[sat-1].arc.ifArc_m   =rtk->x[j];
+		rtk->opt.ssat_Ex[sat-1].arc.ifVarArc_m=rtk->P[j*rtk->nx+j];
+
+		rtk->opt.ssat_Ex[sat-1].arc.mwArc_c   =rtk->opt.ssat_Ex[sat-1].mw[1];
+		rtk->opt.ssat_Ex[sat-1].arc.mwArcVar_c=rtk->opt.ssat_Ex[sat-1].mwVar_c;
+	}
+}
+
+/*calculate satellite elevation*/
+extern void calElev(rtk_t *rtk, const obsd_t *obs, int n, double *rs)
+{
+	int i,sat;
+	double rr[3]={0},pos[3],r,e[3];
+
+	for (i=0;i<MAXSAT;i++)
+		rtk->ssat[i].azel[1]=0.0;
+
+	if ( 0.0!=rtk->opt.crdTrue[0] )
+	{
+		for (i=0;i<3;i++)
+			rr[i]=rtk->opt.crdTrue[i];
+	}
+	else
+	{
+		for (i=0;i<3;i++)
+			rr[i]=rtk->x[i];
+
+		if (rr[0]==0.0)
+		{
+			for (i=0;i<3;i++)
+				rr[i]=rtk->sol.rr[i];
+		}
+	}
+
+	if (norm(rr,3)<=100.0) return ;
+
+	ecef2pos(rr,pos);
+
+	for (i=0;i<n&&i<MAXOBS;i++)
+	{
+		sat=obs[i].sat;
+
+		if (!rtk->opt.sFlag[sat-1].sys) continue;
+
+		/* geometric distance/azimuth/elevation angle */
+		if ((r=geodist(rs+i*6,rr,e))<0) continue;
+		satazel(pos,e,rtk->ssat[sat-1].azel);
+	}
+}
+
+#define MU_GPS   3.9860050E14     /* gravitational constant         ref [1] */
+#define MU_GLO   3.9860044E14     /* gravitational constant         ref [2] */
+#define MU_GAL   3.986004418E14   /* earth gravitational constant   ref [7] */
+#define MU_CMP   3.986004418E14   /* earth gravitational constant   ref [9] */
+
+/*****************************************************************************
+* Name        : gravitationalDelayCorrection
+* Description : Obtains the gravitational delay correction for the effect of
+*               general relativity (red shift) to the GPS signal
+* Parameters  :
+* Name                           |Da|Unit|Description
+* double  *receiverPosition       I  m    Position of the receiver
+* double  *satellitePosition      I  m    Position of the satellite
+* Returned value (double)         O  m    Gravitational delay correction
+*****************************************************************************/
+extern double gravitationalDelayCorrection (const int sys, const double *receiverPosition,
+	                                        const double *satellitePosition)
+{
+	double	receiverModule;
+	double	satelliteModule;
+	double	distance;
+	double  MU=MU_GPS;
+
+	receiverModule=sqrt(receiverPosition[0]*receiverPosition[0]+receiverPosition[1]*receiverPosition[1]+
+		receiverPosition[2]*receiverPosition[2]);
+	satelliteModule=sqrt(satellitePosition[0]*satellitePosition[0]+satellitePosition[1]*satellitePosition[1]+
+		satellitePosition[2]*satellitePosition[2]);
+	distance=sqrt((satellitePosition[0]-receiverPosition[0])*(satellitePosition[0]-receiverPosition[0])+
+		(satellitePosition[1]-receiverPosition[1])*(satellitePosition[1]-receiverPosition[1])+
+		(satellitePosition[2]-receiverPosition[2])*(satellitePosition[2]-receiverPosition[2]));
+
+	switch (sys)
+	{
+	case SYS_GPS:
+		MU=MU_GPS;
+		break;
+	case SYS_GLO:
+		MU=MU_GLO;
+		break;
+	case SYS_GAL:
+		MU=MU_GAL;
+		break;
+	case SYS_CMP:
+		MU=MU_CMP;
+		break;
+	default:
+		MU=MU_GPS;
+		break;
+	}
+
+	return 2.0*MU/(CLIGHT*CLIGHT)*log((satelliteModule+receiverModule+distance)/(satelliteModule+receiverModule-distance));
+}
+
+extern void set_ionconst_mode(rtk_t *rtk, const obsd_t *obs, int n, const double *pos)
+{
+    double tt=fabs(rtk->tt);
+	int i,sat;
+	double fs,posp[3]={0},ep[6]={0},ut,lt_ipp0,lt_ipp;
+
+	for (i=0;i<MAXSAT;i++)
+	{
+		if (rtk->opt.prcOpt_Ex.ion_const_mode==1)
+		{  /*constant constraint*/
+			rtk->opt.ssat_Ex[i].var_ion=0.09;
+		}
+		else if (rtk->opt.prcOpt_Ex.ion_const_mode==3)
+		{  /*stepwise-relaxed constraint*/
+			rtk->opt.ssat_Ex[i].var_ion+=0.04/60.0*tt;
+		}
+	}
+
+	if (rtk->opt.prcOpt_Ex.ion_const_mode==2)
+	{  /*spatial-temporal constraint*/
+		time2epoch(obs[0].time,ep);
+		ut=ep[3]+(ep[4]+ep[5]/60.0)/60.0;
+		for (i=0;i<n&&i<MAXOBS;i++)
+		{
+			sat=obs[i].sat;
+			/* ionospheric pierce point position */
+			fs=ionppp(pos,rtk->ssat[sat-1].azel,6371.0,450.0,posp);
+			lt_ipp0=ut+posp[1]*R2D/15;
+			if (lt_ipp0>=0.0&&lt_ipp0<24) lt_ipp=lt_ipp0;
+			if (lt_ipp0<0.0) lt_ipp=lt_ipp0+24.0;
+			if (lt_ipp0>=24.0) lt_ipp=lt_ipp0-24.0;
+
+			if (lt_ipp<8.0||lt_ipp>20.0||posp[0]>PI/3.0)
+				rtk->opt.ssat_Ex[sat-1].var_ion=0.09;
+			else
+				rtk->opt.ssat_Ex[sat-1].var_ion=0.09+0.09*cos(posp[0])*cos((lt_ipp-14.0)/12.0*PI);
+		}
+	}
+}
+
+extern int findRefSat(rtk_t *rtk, const obsd_t *obs, int n, double *rs, int sysLmt)
+{
+	int iter=0,i,sat,refs=-1,sys;
+	double elev, dtmp=0.0;
+
+	while (iter<5)
+	{
+		elev=-10.0;
+		dtmp=0.0;
+		refs=-1;
+
+		for (i=0;i<n&&i<MAXOBS;i++)
+		{
+			sat=obs[i].sat;
+			sys=rtk->opt.sFlag[sat-1].sys;
+
+			if (sys!=sysLmt)                        continue;
+			if (rs[6*i+0]*rs[6*i+1]*rs[6*i+2]==0.0) continue;
+			if (rtk->ssat[sat-1].vsat[0]==0)        continue;
+			if (iter<=0)
+			{
+				if (rtk->ssat[sat-1].slip[0]||rtk->ssat[sat-1].slip[1])
+					continue;
+			}
+			if (iter<=1)
+			{
+				if (fabs(rtk->ssat[sat-1].resc_pos[0])>0.075) continue;
+				if (fabs(rtk->ssat[sat-1].resc_pos[1])>0.750) continue;
+			}
+
+			dtmp=rtk->ssat[sat-1].azel[1];
+			if (rtk->ssat[sat-1].lock[0]<=3)
+				dtmp/=3.0;
+
+			if (dtmp>elev)
+			{
+				refs=sat; elev=dtmp;
+			}
+		}
+
+		if (refs!=-1)
+			break;
+
+		iter++;
+	}
+
+	return refs;
+}
+
+
+/*clock jump repair*/
+extern int clkRepair(rtk_t *rtk, obsd_t *obs, int n)
+{
+	int i, sat, validGps, cjGps;
+	int bObserved[MAXPRNGPS];
+	double delta0 = 0.0, delta1 = 0.0, d1, d2, d3, d4, ddd1, ddd2;
+	double *lam = 0;
+	double CJ_F1, CJ_F2;
+
+	for (i = 0; i < MAXPRNGPS; i++) bObserved[i] = 0;
+
+	validGps = cjGps = 0;
+
+	for (i = 0; i < n; i++)
+	{
+		sat = obs[i].sat;
+		lam = rtk->opt.lam[sat - 1];
+
+		if (sat > MAXPRNGPS) continue;
+
+		if (obs[i].P[0] * obs[i].P[1] * obs[i].L[0] * obs[i].L[1] == 0.0) continue;
+
+		if (rtk->opt.obs0[sat - 1][0] * rtk->opt.obs0[sat - 1][1] * rtk->opt.obs0[sat - 1][2] * rtk->opt.obs0[sat - 1][3] == 0.0)
+			continue;
+
+		validGps++;
+
+		d1 = obs[i].P[0] - rtk->opt.obs0[sat - 1][0];
+		d2 = obs[i].P[1] - rtk->opt.obs0[sat - 1][1];
+		d3 = (obs[i].L[0] - rtk->opt.obs0[sat - 1][2])*lam[0];
+		d4 = (obs[i].L[1] - rtk->opt.obs0[sat - 1][3])*lam[1];
+
+		if (fabs(d1 - d3) > 290000)
+		{
+			delta0 += d1 - d3;
+			delta1 += d2 - d4;
+			cjGps++;
+		}
+	}
+
+	if (cjGps != 0 && cjGps == validGps)
+	{
+		d1 = delta0 / cjGps;
+		d2 = delta1 / cjGps;
+
+		CJ_F1 = 0.0;
+		CJ_F2 = 0.0;
+		CJ_F1 = d1 / CLIGHT * 1000.0;
+		CJ_F2 = myRound(CJ_F1);
+
+		if (fabs(CJ_F1 - CJ_F2) < 2.5E-2)
+		{
+			rtk->opt.clkJump += (int)CJ_F2;
+		}
+	}
+
+	for (i = 0; i < n; i++)
+	{
+		sat = obs[i].sat;
+
+		if (sat > MAXPRNGPS) continue;
+
+		bObserved[sat - 1] = 1;
+
+		rtk->opt.obs0[sat - 1][0] = obs[i].P[0];
+		rtk->opt.obs0[sat - 1][1] = obs[i].P[1];
+		rtk->opt.obs0[sat - 1][2] = obs[i].L[0];
+		rtk->opt.obs0[sat - 1][3] = obs[i].L[1];
+
+		ddd1 = rtk->opt.clkJump*CLIGHT / 1000.0;
+		ddd2 = rtk->opt.clkJump*CLIGHT / 1000.0;
+
+		/*repair for phase observations*/
+		if (obs[i].L[0] != 0.0) obs[i].L[0] += ddd1 / lam[0];
+
+		if (obs[i].L[1] != 0.0) obs[i].L[1] += ddd2 / lam[1];
+	}
+
+	for (i = 0; i < MAXPRNGPS; i++)
+	{
+		if (bObserved[i] == 0)
+			rtk->opt.obs0[i][0] = rtk->opt.obs0[i][1] = rtk->opt.obs0[i][2] = rtk->opt.obs0[i][3] = 0.0;
+	}
+
+	return 1;
+}
+
+/*calculate DOPs {GDOP,PDOP,HDOP,VDOP} */
+extern double calDop(rtk_t *rtk, const obsd_t *obs, const int n)
+{
+	double azel[MAXSAT * 2], dop[4];
+	int i, num, sat;
+	for (i = num = 0; i < n; i++)
+	{
+		sat = obs[i].sat;
+		if (rtk->ssat[sat - 1].vsat[0] == 0) continue;
+
+		azel[2 * num + 0] = rtk->ssat[sat - 1].azel[0];
+		azel[2 * num + 1] = rtk->ssat[sat - 1].azel[1];
+		num++;
+	}
+	dops(num, azel, 0.0, dop);
+
+	rtk->sol.dop[1] = dop[1];
+
+	return dop[1];
+}
+
+
+/* read ocean tide loading parameters ----------------------------------------*/
+extern void readotl(prcopt_t *popt, const char *file, const sta_t *sta)
+{
+	int i,mode=PMODE_DGPS<=popt->mode&&popt->mode<=PMODE_FIXED;
+
+	for (i=0;i<(mode?2:1);i++)
+	{
+        readblq(file,sta[i].name,popt->odisp[i]);
+    }
+}
+
+
+
 /* dummy application functions for shared library ----------------------------*/
 #ifdef WIN_DLL
 extern int showmsg(char *format,...) {return 0;}

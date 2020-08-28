@@ -266,7 +266,7 @@ static void write_obs(gtime_t time, stream_t *str, strconv_t *conv)
         }
         else if (conv->otype==STRFMT_RTCM3) {
             if (conv->msgs[i]<=1012) {
-            if (!gen_rtcm3(&conv->out,conv->msgs[i],i!=j)) continue;
+                if (!gen_rtcm3(&conv->out,conv->msgs[i],i!=j)) continue;
                 strwrite(str,conv->out.buff,conv->out.nbyte);
             }
             else { /* write rtcm3 msm to stream */
@@ -492,9 +492,9 @@ static void *strsvrthread(void *arg)
         }
         for (i=1;i<svr->nstr;i++) {
             
-            /* read message from output stream if connected */
-            while (strstat(svr->stream+i,NULL)>=2 &&
-                  (n=strread(svr->stream+i,buff,sizeof(buff)))>0) {
+            /* read message from output stream */
+            while ((n=strread(svr->stream+i,buff,sizeof(buff)))>0) {
+                
                 /* relay back message from output stream to input stream */
                 if (i==svr->relayback) {
                     strwrite(svr->stream,buff,n);
@@ -681,22 +681,6 @@ extern void strsvrstop(strsvr_t *svr, char **cmds)
     }
     svr->state=0;
     
-#ifdef WIN32
-    WaitForSingleObject(svr->thread,10000);
-    CloseHandle(svr->thread);
-#else
-    pthread_join(svr->thread,NULL);
-#endif
-}
-/* compatibility with old code */
-extern void strsvrstopold (strsvr_t *svr, char *cmd)
-{
-    tracet(3,"strsvrstop:\n");
-
-    if (cmd) strsendcmd(svr->stream,cmd);
-
-    svr->state=0;
-
 #ifdef WIN32
     WaitForSingleObject(svr->thread,10000);
     CloseHandle(svr->thread);

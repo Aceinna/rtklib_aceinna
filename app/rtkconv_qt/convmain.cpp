@@ -38,7 +38,9 @@
 #include "convopt.h"
 #include "viewer.h"
 #include "rtklib.h"
+
 #include <locale.h>
+
 //---------------------------------------------------------------------------
 
 MainWindow *mainWindow;
@@ -700,6 +702,7 @@ void MainWindow::ConvertFile(void)
         else if (fi.completeSuffix()=="rtcm3") conversionThread->format=STRFMT_RTCM3;
         else if (fi.completeSuffix()=="gps"  ) conversionThread->format=STRFMT_OEM4;
         else if (fi.completeSuffix()=="ubx"  ) conversionThread->format=STRFMT_UBX;
+        else if (fi.completeSuffix()=="log"  ) conversionThread->format=STRFMT_SS2;
         else if (fi.completeSuffix()=="bin"  ) conversionThread->format=STRFMT_CRES;
         else if (fi.completeSuffix()=="jps"  ) conversionThread->format=STRFMT_JAVAD;
         else if (fi.completeSuffix()=="bnx"  ) conversionThread->format=STRFMT_BINEX;

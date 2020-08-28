@@ -339,7 +339,7 @@ static void free_strfile(strfile_t *str)
 /* input stream file ---------------------------------------------------------*/
 static int input_strfile(strfile_t *str)
 {
-    int type=0;
+    int type=0,prn,sys;
     
     trace(4,"input_strfile:\n");
     
@@ -367,8 +367,9 @@ static int input_strfile(strfile_t *str)
             str->sat=str->rnx.ephsat;
         }
     }
-    trace(4,"input_strfile: time=%s type=%d sat=%2d\n",time_str(str->time,3),
-          type,str->sat);
+	sys=satsys(str->sat,&prn);
+    trace(4,"input_strfile: time=%s type=%d sat=%c%2d\n",time_str(str->time,3),
+          type,sys2char(sys),prn);
     return type;
 }
 /* open stream file ----------------------------------------------------------*/
@@ -425,7 +426,7 @@ static void close_strfile(strfile_t *str)
     }
 }
 /* sort codes ----------------------------------------------------------------*/
-static void sort_codes(unsigned char *codes, unsigned char *types, int n)
+static void sort_codes(int sys, unsigned char *codes, unsigned char *types, int n)
 {
     unsigned char tmp;
     char *obs1,*obs2;
@@ -455,7 +456,7 @@ static void setopt_obstype(const unsigned char *codes,
     
     for (i=0;codes[i];i++) {
         
-		if (!(id=code2obs(codes[i],&freq))) continue;
+        if (!(id=code2obs(codes[i],&freq))) continue;
         
         if (!(opt->freqtype&(1<<(freq-1)))||opt->mask[sys][codes[i]-1]=='0') {
             continue;
@@ -593,8 +594,11 @@ static int scan_obstype(int format, char **files, int nf, rnxopt_t *opt,
     strfile_t *str;
     unsigned char codes[NSATSYS][33]={{0}};
     unsigned char types[NSATSYS][33]={{0}};
-    char msg[128];
+	char msg[2014] = { 0 };
     int i,j,k,l,m,c=0,type,sys,abort=0,n[NSATSYS]={0};
+	double dt = 0.0;
+	gtime_t pretime = { 0 }, starttime = { 0 };
+	unsigned long numofepoch[11] = { 0 };
     
     trace(3,"scan_obstype: nf=%d, opt=%s\n",nf,opt);
     
@@ -613,7 +617,7 @@ static int scan_obstype(int format, char **files, int nf, rnxopt_t *opt,
                 continue;
             }
             if (type!=1||str->obs->n<=0) continue;
-            
+
             if (!opt->ts.time||timediff(str->obs->data[0].time,opt->ts)>=0.001) {
                  
                 for (i=0;i<str->obs->n;i++) {
@@ -640,42 +644,76 @@ static int scan_obstype(int format, char **files, int nf, rnxopt_t *opt,
                     /* update half-cycle ambiguity status */
                     update_halfc(halfc,str->obs->data+i);
                 }
+				if (starttime.time == 0.0) starttime = str->obs->data[0].time;
                 if (!time->time) *time=str->obs->data[0].time;
+				if (str->obs->n > 0)
+				{
+					if (pretime.time>0.0)
+						dt = timediff(str->obs->data[str->obs->n - 1].time, pretime);
+					pretime = str->obs->data[str->obs->n - 1].time;
+				}
+				if (dt > 0.0)
+				{
+					if (dt < 1.5) ++numofepoch[0];  /*0 sec gap*/
+					else if (dt < 2.5) ++numofepoch[1];  /*1 sec gap*/
+					else if (dt < 3.5) ++numofepoch[2]; /* 2 sec gap*/
+					else if (dt < 4.5) ++numofepoch[3];  /*3 sec gap*/
+					else if (dt < 5.5) ++numofepoch[4];  /*4 sec gap*/
+					else if (dt < 10.5) ++numofepoch[5];  /*5-10 sec gap*/
+					else if (dt < 30.5) ++numofepoch[6];  /*11-30 sec gap*/
+					else if (dt < 60.5) ++numofepoch[7];  /*31-60 sec gap*/
+					else if (dt < 300.5) ++numofepoch[8];  /*61-300 sec gap*/
+					else if (dt < 600.5) ++numofepoch[9];  /*301-600 sec gap*/
+					else ++numofepoch[10];  /*601 sec gap*/
+				}
             }
             if (opt->te.time&&timediff(str->obs->data[0].time,opt->te)>10.0) break;
             
             if (++c%11) continue;
             
-            sprintf(msg,"scanning: %s %s%s%s%s%s%s%s",time_str(str->time,0),
-                    n[0]?"G":"",n[1]?"R":"",n[2]?"E":"",n[3]?"J":"",
-                    n[4]?"S":"",n[5]?"C":"",n[6]?"I":"");
+            sprintf(msg,"scanning: %s %s%s%s%s%s%s%s %7.3f",time_str(str->time,0),
+                    n[0]?"G":" ",n[1]?"R":" ",n[2]?"E":" ",n[3]?"J":" ",
+                    n[4]?"S":" ",n[5]?"C":" ",n[6]?"I":" ", dt);
             if ((abort=showmsg(msg))) break;
         }
+
+		showmsg("");
+		sprintf(msg, "Start Time: %s\n", time_str(starttime, 0));
+		showmsg(msg);
+		sprintf(msg, "End   Time: %s\nDuration  : %10.3f s\n", time_str(str->obs->data[0].time, 0), timediff(str->obs->data[0].time, starttime));
+		showmsg(msg);
+
+		sprintf(msg, "Epoch Gap Info\n TOTAL    %6i\n[      1] %6i\n[      2] %6i\n[      3] %6i\n[      4] %6i\n[  5- 10] %6i\n[ 11- 30] %6i\n[ 31- 60] %6i\n[ 61-300] %6i\n[301-600] %6i\n[601-   ] %6i\n"
+			, numofepoch[0], numofepoch[1], numofepoch[2], numofepoch[3], numofepoch[4], numofepoch[5], numofepoch[6], numofepoch[7], numofepoch[8], numofepoch[9], numofepoch[10]);
+		showmsg(msg);
+
         close_strfile(str);
     }
     free_strfile(str);
     
     showmsg("");
+
+	/*tracelevel(4);*/
     
     if (abort) {
         trace(2,"aborted in scan\n");
         return 0;
     }
-    for (i=0;i<NSATSYS;i++) for (j=0;j<n[i];j++) {
-		trace(2,"scan_obstype: sys=%d code=%s type=%d\n",i,code2obs(codes[i][j],NULL),types[i][j]);
-    }
-    for (i=0;i<NSATSYS;i++) {
+	for (i=0;i<NSATSYS;i++) {
+		for (j=0;j<n[i];j++) {
+			trace(2,"scan_obstype: sys=%d code=%s type=%d\n",i,code2obs(codes[i][j],NULL),types[i][j]);
+		}
         
-        /* sort codes */
-        sort_codes(codes[i],types[i],n[i]);
+		/* sort codes */
+        sort_codes(navsys[i], codes[i],types[i],n[i]);
         
         /* set observation types in rinex option */
         setopt_obstype(codes[i],types[i],i,opt);
         
         for (j=0;j<n[i];j++) {
-            trace(3,"scan_obstype: sys=%d code=%s\n",i,code2obs(codes[i][j],NULL));
-        }
-    }
+			trace(3,"scan_obstype: sys=%d code=%s\n",i,code2obs(codes[i][j],NULL));
+		}
+	}
     return 1;
 }
 /* set observation types -----------------------------------------------------*/
@@ -691,42 +729,27 @@ static void set_obstype(int format, rnxopt_t *opt)
         {0},
         {0}
     };
-    static const unsigned char codes_rtcm3[NSATSYS][32]={ /* rtcm 3.2 */
-        {CODE_L1C,CODE_L1P,CODE_L1W,CODE_L1Y,CODE_L1M,CODE_L1N,CODE_L1S,CODE_L1L,
-         CODE_L2C,CODE_L2D,CODE_L2S,CODE_L2L,CODE_L2X,CODE_L2P,CODE_L2W,CODE_L2Y,
-         CODE_L2M,CODE_L2N,CODE_L5I,CODE_L5Q,CODE_L5X},
-        {CODE_L1C,CODE_L1P,CODE_L2C,CODE_L2P,CODE_L3I,CODE_L3Q,CODE_L3X},
-        {CODE_L1C,CODE_L1A,CODE_L1B,CODE_L1X,CODE_L1Z,CODE_L5I,CODE_L5Q,CODE_L5X,
-         CODE_L6A,CODE_L6B,CODE_L6C,CODE_L6X,CODE_L6Z,CODE_L7I,CODE_L7Q,CODE_L7X,
-         CODE_L8I,CODE_L8Q,CODE_L8X},
-        {CODE_L1C,CODE_L1S,CODE_L1L,CODE_L1X,CODE_L1Z,CODE_L2S,CODE_L2L,CODE_L2X,
-         CODE_L5I,CODE_L5Q,CODE_L5X,CODE_L6S,CODE_L6L,CODE_L6X},
-        {CODE_L1C,CODE_L5I,CODE_L5Q,CODE_L5X},
-        {CODE_L1I,CODE_L1Q,CODE_L1X,CODE_L2I,CODE_L2Q,CODE_L2X,
-         CODE_L7I,CODE_L7Q,CODE_L7X,CODE_L6I,CODE_L6Q,CODE_L6X},
-        {CODE_L5A,CODE_L5B,CODE_L5C,CODE_L5X,CODE_L9A,CODE_L9B,CODE_L9C,CODE_L9X}
-    };
-    static const unsigned char codes_cnav[NSATSYS][8]={ /* comnav */
-        {CODE_L1C,CODE_L1P,CODE_L2D,CODE_L2X,CODE_L5I},
-        {CODE_L1C,CODE_L2C},
-        {CODE_L1B,CODE_L1X,CODE_L5X,CODE_L7X,CODE_L8X},
-        {CODE_L1C,CODE_L2X,CODE_L5Q},
-        {CODE_L1C,CODE_L5I},
+    static const unsigned char codes_rtcm3[NSATSYS][8]={ /* rtcm3 */
+        {CODE_L1C,CODE_L1W,CODE_L2W,CODE_L2X,CODE_L5X},
+        {CODE_L1C,CODE_L1P,CODE_L2C,CODE_L2P},
+        {CODE_L1X,CODE_L5X,CODE_L7X,CODE_L8X},
+        {CODE_L1C,CODE_L2X,CODE_L5X},
+        {CODE_L1C,CODE_L5X},
         {CODE_L1I,CODE_L7I},
+        {0}
+    };
+    static const unsigned char codes_oem3[NSATSYS][8]={ /* novatel oem3 */
+        {CODE_L1C,CODE_L2P},
+        {0},
+        {0},
+        {0},
+        {CODE_L1C},
+        {0},
         {0}
     };
     static const unsigned char codes_oem4[NSATSYS][8]={ /* novatel oem6 */
         {CODE_L1C,CODE_L1P,CODE_L2D,CODE_L2X,CODE_L5Q},
         {CODE_L1C,CODE_L2C,CODE_L2P},
-        {CODE_L1B,CODE_L1C,CODE_L5Q,CODE_L7Q,CODE_L8Q},
-        {CODE_L1C,CODE_L2X,CODE_L5Q},
-        {CODE_L1C,CODE_L5I},
-        {CODE_L1I,CODE_L7I},
-        {0}
-    };
-    static const unsigned char codes_trs[NSATSYS][8]={ /* tersus */
-        {CODE_L1C,CODE_L2D},
-        {CODE_L1C,CODE_L2P},
         {CODE_L1B,CODE_L1C,CODE_L5Q,CODE_L7Q,CODE_L8Q},
         {CODE_L1C,CODE_L2X,CODE_L5Q},
         {CODE_L1C,CODE_L5I},
@@ -762,8 +785,8 @@ static void set_obstype(int format, rnxopt_t *opt)
         {CODE_L1C,CODE_L1S,CODE_L1L,CODE_L1X,CODE_L1Z,CODE_L2S,CODE_L2L,CODE_L2X,
          CODE_L5I,CODE_L5Q,CODE_L5X,CODE_L6S,CODE_L6L,CODE_L6X},
         {CODE_L1C,CODE_L5I,CODE_L5Q,CODE_L5X},
-        {CODE_L1I,CODE_L1Q,CODE_L1X,CODE_L2I,CODE_L2Q,CODE_L2X,
-         CODE_L7I,CODE_L7Q,CODE_L7X,CODE_L6I,CODE_L6Q,CODE_L6X},
+        {CODE_L1I,CODE_L1Q,CODE_L1X,CODE_L7I,CODE_L7Q,CODE_L7X,CODE_L6I,CODE_L6Q,
+         CODE_L6X},
         {CODE_L5A,CODE_L5B,CODE_L5C,CODE_L5X,CODE_L9A,CODE_L9B,CODE_L9C,CODE_L9X}
     };
     static const unsigned char codes_rt17[NSATSYS][8]={ /* rt17 */
@@ -773,7 +796,7 @@ static void set_obstype(int format, rnxopt_t *opt)
         {0},
         {0},
         {0},
-        {0}
+        {0},
     };
     static const unsigned char codes_cmr[NSATSYS][8]={ /* cmr */
         {CODE_L1C,CODE_L1P,CODE_L2C,CODE_L2P,CODE_L2W},
@@ -782,45 +805,34 @@ static void set_obstype(int format, rnxopt_t *opt)
         {0},
         {0},
         {0},
-        {0}
+        {0},
     };
-    static const unsigned char codes_sbp[NSATSYS][8]={ /* Swift */
-        {CODE_L1C,CODE_L2S},
-        {CODE_L1C,CODE_L2C},
-        {CODE_L1B,CODE_L7I},
+    static const unsigned char codes_other[NSATSYS][8]={ /* others */
         {CODE_L1C},
         {CODE_L1C},
-        {CODE_L1I,CODE_L7I},
-        {0}
-    };
-    static const unsigned char codes_other[NSATSYS][8]={ /* others inc u-blox */
-        {CODE_L1C,CODE_L2L,CODE_L2S},
-        {CODE_L1C,CODE_L2C},
-        {CODE_L1C,CODE_L1X,CODE_L7Q},
         {CODE_L1C},
         {CODE_L1C},
-        {CODE_L1I,CODE_L2I,CODE_L7I},
+        {CODE_L1C},
+        {CODE_L1I},
         {0}
     };
     const unsigned char *codes;
     int i;
     
     trace(3,"set_obstype: format=%d\n",format);
-
+    
     for (i=0;i<NSATSYS;i++) {
         switch (format) {
             case STRFMT_RTCM2: codes=codes_rtcm2[i]; break;
             case STRFMT_RTCM3: codes=codes_rtcm3[i]; break;
             case STRFMT_OEM4 : codes=codes_oem4 [i]; break;
-            case STRFMT_CNAV : codes=codes_cnav [i]; break;
+            case STRFMT_OEM3 : codes=codes_oem3 [i]; break;
             case STRFMT_CRES : codes=codes_cres [i]; break;
-            case STRFMT_SBP  : codes=codes_sbp  [i]; break;
             case STRFMT_JAVAD: codes=codes_javad[i]; break;
             case STRFMT_BINEX: codes=codes_rinex[i]; break;
             case STRFMT_RT17 : codes=codes_rt17 [i]; break;
             case STRFMT_CMR  : codes=codes_cmr  [i]; break;
             case STRFMT_RINEX: codes=codes_rinex[i]; break;
-            case STRFMT_TERSUS: codes=codes_trs [i]; break;
             default:           codes=codes_other[i]; break;
         }
         /* set observation types in rinex option */
@@ -1008,12 +1020,7 @@ static void convobs(FILE **ofp, rnxopt_t *opt, strfile_t *str, int *staid,
         }
     }
     /* output rinex obs */
-    outrnxobsb(ofp[0],opt,str->obs->data,str->obs->n,str->obs->flag);
-    /* n[NOUTFILE+1] - count of events converted to rinex */
-    if (str->obs->flag == 5)
-       n[NOUTFILE+1]++;
-    /* set to zero flag for the next iteration (initialization) */
-    str->obs->flag = 0;
+    outrnxobsb(ofp[0],opt,str->obs->data,str->obs->n,0);
     
     if (opt->tstart.time==0) opt->tstart=time;
     opt->tend=time;
@@ -1224,7 +1231,7 @@ static void setapppos(strfile_t *str, rnxopt_t *opt)
 /* show status message -------------------------------------------------------*/
 static int showstat(int sess, gtime_t ts, gtime_t te, int *n)
 {
-    const char type[]="ONGHQLCISET";
+    const char type[]="ONGHQLCISE";
     char msg[1024]="",*p=msg,s[64];
     int i;
     
@@ -1241,10 +1248,9 @@ static int showstat(int sess, gtime_t ts, gtime_t te, int *n)
     }
     p+=sprintf(p,": ");
     
-    /* +2 to NOUTFILE for counters of errors and events */
-    for (i=0;i<NOUTFILE+2;i++) {
+    for (i=0;i<NOUTFILE+1;i++) {
         if (n[i]==0) continue;
-        p+=sprintf(p,"%c=%d%s",type[i],n[i],i<NOUTFILE+1?" ":"");
+        p+=sprintf(p,"%c=%d%s",type[i],n[i],i<NOUTFILE?" ":"");
     }
     return showmsg(msg);
 }
@@ -1258,7 +1264,7 @@ static int convrnx_s(int sess, int format, rnxopt_t *opt, const char *file,
     halfc_t halfc={{{0}}};
     gtime_t ts={0},te={0},tend={0},time={0};
     unsigned char slips[MAXSAT][NFREQ+NEXOBS]={{0}};
-    int i,j,nf,type,n[NOUTFILE+2]={0},staid=-1,abort=0;
+    int i,j,nf,type,n[NOUTFILE+1]={0},staid=-1,abort=0;
     char path[1024],*paths[NOUTFILE],s[NOUTFILE][1024];
     char *epath[MAXEXFILE]={0},*staname=*opt->staid?opt->staid:"0000";
     
@@ -1292,9 +1298,8 @@ static int convrnx_s(int sess, int format, rnxopt_t *opt, const char *file,
         /* set observation types by format */
         set_obstype(format,opt);
     }
-#if 1
     dump_halfc(&halfc);
-#endif
+    
     if (!(str=gen_strfile(format,opt->rcvopt,time))) {
         for (i=0;i<MAXEXFILE;i++) free(epath[i]);
         return 0;

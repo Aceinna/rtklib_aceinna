@@ -1,25 +1,5 @@
 /*------------------------------------------------------------------------------
 * tides.c : tidal displacement corrections
-*
-*          Copyright (C) 2015-2017 by T.TAKASU, All rights reserved.
-*
-* options : -DIERS_MODEL use IERS tide model
-*
-* references :
-*     [1] D.D.McCarthy, IERS Technical Note 21, IERS Conventions 1996, July 1996
-*     [2] D.D.McCarthy and G.Petit, IERS Technical Note 32, IERS Conventions
-*         2003, November 2003
-*     [3] D.A.Vallado, Fundamentals of Astrodynamics and Applications 2nd ed,
-*         Space Technology Library, 2004
-*     [4] J.Kouba, A Guide to using International GNSS Service (IGS) products,
-*         May 2009
-*     [5] G.Petit and B.Luzum (eds), IERS Technical Note No. 36, IERS
-*         Conventions (2010), 2010
-*
-* version : $Revision:$ $Date:$
-* history : 2015/05/10 1.0  separated from ppp.c
-*           2015/06/11 1.1  fix bug on computing days in tide_oload() (#128)
-*           2017/04/11 1.2  fix bug on calling geterp() in timdedisp()
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 
@@ -30,23 +10,14 @@
 #define GMS         1.327124E+20    /* sun gravitational constant */
 #define GMM         4.902801E+12    /* moon gravitational constant */
 
-/* function prototypes -------------------------------------------------------*/
-#ifdef IERS_MODEL
-extern int dehanttideinel_(double *xsta, int *year, int *mon, int *day,
-                           double *fhr, double *xsun, double *xmon,
-                           double *dxtide);
-#endif
 
 /* solar/lunar tides (ref [2] 7) ---------------------------------------------*/
-#ifndef IERS_MODEL
 static void tide_pl(const double *eu, const double *rp, double GMp,
                     const double *pos, double *dr)
 {
     const double H3=0.292,L3=0.015;
     double r,ep[3],latp,lonp,p,K2,K3,a,H2,L2,dp,du,cosp,sinl,cosl;
     int i;
-    
-    trace(4,"tide_pl : pos=%.3f %.3f\n",pos[0]*R2D,pos[1]*R2D);
     
     if ((r=norm(rp,3))<=0.0) return;
     
@@ -55,7 +26,7 @@ static void tide_pl(const double *eu, const double *rp, double GMp,
     K2=GMp/GME*SQR(RE_WGS84)*SQR(RE_WGS84)/(r*r*r);
     K3=K2*RE_WGS84/r;
     latp=asin(ep[2]); lonp=atan2(ep[1],ep[0]);
-    cosp=cos(latp); sinl=sin(pos[0]); cosl=cos(pos[0]);
+    cosp=cos(latp);   sinl=sin(pos[0]); cosl=cos(pos[0]);
     
     /* step1 in phase (degree 2) */
     p=(3.0*sinl*sinl-1.0)/2.0;
@@ -76,8 +47,6 @@ static void tide_pl(const double *eu, const double *rp, double GMp,
     dr[0]=dp*ep[0]+du*eu[0];
     dr[1]=dp*ep[1]+du*eu[1];
     dr[2]=dp*ep[2]+du*eu[2];
-    
-    trace(5,"tide_pl : dr=%.3f %.3f %.3f\n",dr[0],dr[1],dr[2]);
 }
 /* displacement by solid earth tide (ref [2] 7) ------------------------------*/
 static void tide_solid(const double *rsun, const double *rmoon,
@@ -85,8 +54,6 @@ static void tide_solid(const double *rsun, const double *rmoon,
                        double *dr)
 {
     double dr1[3],dr2[3],eu[3],du,dn,sinl,sin2l;
-    
-    trace(3,"tide_solid: pos=%.3f %.3f opt=%d\n",pos[0]*R2D,pos[1]*R2D,opt);
     
     /* step1: time domain */
     eu[0]=E[2]; eu[1]=E[5]; eu[2]=E[8];
@@ -110,10 +77,7 @@ static void tide_solid(const double *rsun, const double *rmoon,
         dr[1]+=du*E[5]+dn*E[4];
         dr[2]+=du*E[8]+dn*E[7];
     }
-    trace(5,"tide_solid: dr=%.3f %.3f %.3f\n",dr[0],dr[1],dr[2]);
 }
-#endif /* !IERS_MODEL */
-
 /* displacement by ocean tide loading (ref [2] 7) ----------------------------*/
 static void tide_oload(gtime_t tut, const double *odisp, double *denu)
 {
@@ -133,8 +97,6 @@ static void tide_oload(gtime_t tut, const double *odisp, double *denu)
     const double ep1975[]={1975,1,1,0,0,0};
     double ep[6],fday,days,t,t2,t3,a[5],ang,dp[3]={0};
     int i,j;
-    
-    trace(3,"tide_oload:\n");
     
     /* angular argument: see subroutine arg.f for reference [1] */
     time2epoch(tut,ep);
@@ -159,8 +121,6 @@ static void tide_oload(gtime_t tut, const double *odisp, double *denu)
     denu[0]=-dp[1];
     denu[1]=-dp[2];
     denu[2]= dp[0];
-    
-    trace(5,"tide_oload: denu=%.3f %.3f %.3f\n",denu[0],denu[1],denu[2]);
 }
 /* iers mean pole (ref [7] eq.7.25) ------------------------------------------*/
 static void iers_mean_pole(gtime_t tut, double *xp_bar, double *yp_bar)
@@ -186,8 +146,6 @@ static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
 {
     double xp_bar,yp_bar,m1,m2,cosl,sinl;
     
-    trace(3,"tide_pole: pos=%.3f %.3f\n",pos[0]*R2D,pos[1]*R2D);
-    
     /* iers mean pole (mas) */
     iers_mean_pole(tut,&xp_bar,&yp_bar);
     
@@ -201,8 +159,6 @@ static void tide_pole(gtime_t tut, const double *pos, const double *erpv,
     denu[0]=  9E-3*sin(pos[0])    *(m1*sinl-m2*cosl); /* de= Slambda (m) */
     denu[1]= -9E-3*cos(2.0*pos[0])*(m1*cosl+m2*sinl); /* dn=-Stheta  (m) */
     denu[2]=-33E-3*sin(2.0*pos[0])*(m1*cosl+m2*sinl); /* du= Sr      (m) */
-    
-    trace(5,"tide_pole : denu=%.3f %.3f %.3f\n",denu[0],denu[1],denu[2]);
 }
 /* tidal displacement ----------------------------------------------------------
 * displacements by earth tides
@@ -235,12 +191,6 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
     gtime_t tut;
     double pos[2],E[9],drt[3],denu[3],rs[3],rm[3],gmst,erpv[5]={0};
     int i;
-#ifdef IERS_MODEL
-    double ep[6],fhr;
-    int year,mon,day;
-#endif
-    
-    trace(3,"tidedisp: tutc=%s\n",time_str(tutc,0));
     
     if (erp) {
         geterp(erp,utc2gpst(tutc),erpv);
@@ -256,22 +206,10 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
     xyz2enu(pos,E);
     
     if (opt&1) { /* solid earth tides */
-        
         /* sun and moon position in ecef */
         sunmoonpos(tutc,erpv,rs,rm,&gmst);
         
-#ifdef IERS_MODEL
-        time2epoch(tutc,ep);
-        year=(int)ep[0];
-        mon =(int)ep[1];
-        day =(int)ep[2];
-        fhr =ep[3]+ep[4]/60.0+ep[5]/3600.0;
-        
-        /* call DEHANTTIDEINEL */
-        dehanttideinel_((double *)rr,&year,&mon,&day,&fhr,rs,rm,drt);
-#else
         tide_solid(rs,rm,pos,E,gmst,opt,drt);
-#endif
         for (i=0;i<3;i++) dr[i]+=drt[i];
     }
     if ((opt&2)&&odisp) { /* ocean tide loading */
@@ -284,5 +222,4 @@ extern void tidedisp(gtime_t tutc, const double *rr, int opt, const erp_t *erp,
         matmul("TN",3,1,3,1.0,E,denu,0.0,drt);
         for (i=0;i<3;i++) dr[i]+=drt[i];
     }
-    trace(5,"tidedisp: dr=%.3f %.3f %.3f\n",dr[0],dr[1],dr[2]);
 }

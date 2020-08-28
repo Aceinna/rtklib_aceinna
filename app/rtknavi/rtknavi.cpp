@@ -31,24 +31,24 @@
 
 
 USEFORM("..\appcmn\viewer.cpp", TextViewer);
-USEFORM("..\appcmn\tcpoptdlg.cpp", TcpOptDialog);
-USEFORM("..\appcmn\serioptdlg.cpp", SerialOptDialog);
 USEFORM("..\appcmn\vieweropt.cpp", ViewerOptDialog);
+USEFORM("..\appcmn\serioptdlg.cpp", SerialOptDialog);
+USEFORM("..\appcmn\tcpoptdlg.cpp", TcpOptDialog);
 USEFORM("markdlg.cpp", MarkDialog);
-USEFORM("logstrdlg.cpp", LogStrDialog);
-USEFORM("instrdlg.cpp", InputStrDialog);
-USEFORM("..\appcmn\refdlg.cpp", RefDialog);
-USEFORM("..\appcmn\confdlg.cpp", ConfDialog);
-USEFORM("..\appcmn\cmdoptdlg.cpp", CmdOptDialog);
-USEFORM("..\appcmn\aboutdlg.cpp", AboutDialog);
-USEFORM("..\appcmn\ftpoptdlg.cpp", FtpOptDialog);
-USEFORM("..\appcmn\maskoptdlg.cpp", MaskOptDialog);
-USEFORM("..\appcmn\keydlg.cpp", KeyDialog);
-USEFORM("naviopt.cpp", OptDialog);
-USEFORM("navimain.cpp", MainForm);
 USEFORM("mondlg.cpp", MonitorDialog);
-USEFORM("outstrdlg.cpp", OutputStrDialog);
+USEFORM("instrdlg.cpp", InputStrDialog);
+USEFORM("logstrdlg.cpp", LogStrDialog);
+USEFORM("..\appcmn\confdlg.cpp", ConfDialog);
+USEFORM("..\appcmn\ftpoptdlg.cpp", FtpOptDialog);
+USEFORM("..\appcmn\aboutdlg.cpp", AboutDialog);
+USEFORM("..\appcmn\cmdoptdlg.cpp", CmdOptDialog);
+USEFORM("..\appcmn\maskoptdlg.cpp", MaskOptDialog);
+USEFORM("..\appcmn\refdlg.cpp", RefDialog);
+USEFORM("..\appcmn\keydlg.cpp", KeyDialog);
+USEFORM("navimain.cpp", MainForm);
 USEFORM("rcvoptdlg.cpp", RcvOptDialog);
+USEFORM("naviopt.cpp", OptDialog);
+USEFORM("outstrdlg.cpp", OutputStrDialog);
 //---------------------------------------------------------------------------
 WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {

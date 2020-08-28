@@ -68,7 +68,8 @@
 #include "viewer.h"
 #include "vmapdlg.h"
 #include "fileseldlg.h"
-#include "locale.h"
+
+#include <locale.h>
 
 #define YLIM_AGE    10.0            // ylimit of age of differential
 #define YLIM_RATIO  20.0            // ylimit of raito factor

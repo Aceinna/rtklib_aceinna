@@ -16,7 +16,8 @@
 #include "mapdlg.h"
 #include "pntdlg.h"
 #include "geview.h"
-#include "locale.h"
+
+#include <locale.h>
 
 #define MAX_SIMOBS	16384			// max genrated obs epochs
 #define MAX_SKYIMG_R 2048			// max size of resampled sky image

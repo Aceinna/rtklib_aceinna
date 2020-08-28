@@ -389,12 +389,12 @@ static int decode_measepoch(raw_t *raw){
         h=getFreqNo(signType1);
 #else
         freqType1 = getSigFreq(signType1,8);
-        if      (freqType1 == FREQL1) h = 0;
-        else if (freqType1 == FREQL2) h = 1;
-        else if (freqType1 == FREQE5b) h = 2;
-        else if (freqType1 == FREQL5) h = 3;
-        else if (freqType1 == FREQE6) h = 4;
-        else if (freqType1 == FREQE5ab) h = 5;
+        if      (freqType1 == FREQ1) h = 0;
+        else if (freqType1 == FREQ2) h = 1;
+        else if (freqType1 == FREQ5) h = 2;
+        else if (freqType1 == FREQ6) h = 3;
+        else if (freqType1 == FREQ7) h = 4;
+        else if (freqType1 == FREQ8) h = 5;
         else                         h = 0;
 #endif
         /* store signal info */
@@ -469,12 +469,12 @@ static int decode_measepoch(raw_t *raw){
             h=getFreqNo(signType2);
 #else
             freqType2 = getSigFreq(signType2,8);
-            if      (freqType2 == FREQL1) h = 0;
-            else if (freqType2 == FREQL2) h = 1;
-            else if (freqType2 == FREQE5b)h = 2;
-            else if (freqType2 == FREQL5) h = 3;
-            else if (freqType2 == FREQE6) h = 4;
-            else if (freqType2 == FREQE5ab) h = 5;
+            if      (freqType2 == FREQ1) h = 0;
+            else if (freqType2 == FREQ2) h = 1;
+            else if (freqType2 == FREQ5) h = 2;
+            else if (freqType2 == FREQ6) h = 3;
+            else if (freqType2 == FREQ7) h = 4;
+            else if (freqType2 == FREQ8) h = 5;
             else                         h = 0;
 #endif
             pri=getcodepri(sys,getSignalCode(signType2),raw->opt); /* get signal priority */
@@ -514,19 +514,19 @@ static double getSigFreq(int _signType, int freqNo){
     switch (_signType)
     {
     case 0:                                                        /* GPSL1CA */
-        return FREQL1;
+        return FREQ1;
     case 1:                                                        /* GPSL1PY */
-        return FREQL1;
+        return FREQ1;
     case 2:                                                        /* GPSL2PY */
-        return FREQL2;
+        return FREQ2;
     case 3:                                                        /* GPSL2C  */
-        return FREQL2;
+        return FREQ2;
     case 4:                                                        /* GPSL5   */
-        return FREQL5;
+        return FREQ5;
     case 6:                                                        /* QZSL1C  */
-        return FREQL1;
+        return FREQ1;
     case 7:                                                        /* QZSL2C  */
-        return FREQL2;
+        return FREQ2;
     case 8:                                                        /* GLOL1CA */
         return FREQ1_GLO+(freqNo*9./16.)*1e6;
     case 9:                                                        /* GLOL1P  */
@@ -538,27 +538,27 @@ static double getSigFreq(int _signType, int freqNo){
     case 12:                                                       /* GLOL3X  */
         return 1.202025*1e9;
     case 15:                                                       /* IRNSSL5  */
-        return FREQL5;
+        return FREQ5;
     case 16:                                                       /* GALL1A  */
-        return FREQL1;
+        return FREQ1;
     case 17:                                                       /* GALL1BC */
-        return FREQL1;
+        return FREQ1;
     case 18:                                                       /* GALE6A  */
-        return FREQE6;
+        return FREQ6;
     case 19:                                                       /* GALE6BC */
-        return FREQE6;
+        return FREQ6;
     case 20:                                                       /* GALE5a  */
-        return FREQL5;
+        return FREQ5;
     case 21:                                                       /* GALE5b  */
-        return FREQE5b;
+        return FREQ7;
     case 22:                                                       /* GALE5   */
-        return FREQE5ab;
+        return FREQ8;
     case 24:                                                       /* GEOL1   */
-        return FREQL1;
+        return FREQ1;
     case 25:                                                       /* GEOL5   */
-        return FREQL5;
+        return FREQ5;
     case 26:                                                       /* QZSL5   */
-        return FREQL5;
+        return FREQ5;
     case 28:                                                       /* CMPL1   */
         return FREQ1_CMP;
     case 29:                                                       /* CMPE5B  */
@@ -566,7 +566,7 @@ static double getSigFreq(int _signType, int freqNo){
     case 30:                                                       /* CMPB3   */
         return FREQ3_CMP;
     }
-    return FREQL1;
+    return FREQ1;
 }
 
 #if 0 /* UNUSED */

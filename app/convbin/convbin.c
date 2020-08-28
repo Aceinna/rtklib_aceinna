@@ -69,7 +69,7 @@ static const char *help[]={
 " NovAtel OEMV/4,OEMStar: RANGECMPB, RANGEB, RAWEPHEMB, IONUTCB, RAWWASSFRAMEB",
 " NovAtel OEM3          : RGEB, REGD, REPB, FRMB, IONB, UTCB",
 " u-blox LEA-4T/5T/6T   : RXM-RAW, RXM-SFRB",
-" Swift Piksi Multi     : ",
+" NovAtel Superstar II  : ID#20, ID#21, ID#22, ID#23, ID#67",
 " Hemisphere            : BIN76, BIN80, BIN94, BIN95, BIN96",
 " SkyTraq S1315F        : msg0xDD, msg0xE0, msg0xDC",
 " GW10                  : msg0x08, msg0x03, msg0x27, msg0x20",
@@ -101,7 +101,7 @@ static const char *help[]={
 "                  nov  = NovAtel OEMV/4/6,OEMStar",
 "                  oem3 = NovAtel OEM3",
 "                  ubx  = ublox LEA-4T/5T/6T/7T/M8T",
-"                  sbp  = Swift Navigation SBP",
+"                  ss2  = NovAtel Superstar II",
 "                  hemis= Hemisphere Eclipse/Crescent",
 "                  stq  = SkyTraq S1315F",
 "                  javad= Javad",
@@ -159,7 +159,7 @@ static const char *help[]={
 "     *.rtcm3       RTCM 3",
 "     *.gps         NovAtel OEMV/4/6,OEMStar",
 "     *.ubx         u-blox LEA-4T/5T/6T/7T/M8T",
-"     *.sbp         Swift Navigation SBP",
+"     *.log         NovAtel Superstar II",
 "     *.bin         Hemisphere Eclipse/Crescent",
 "     *.stq         SkyTraq S1315F",
 "     *.jps         Javad",
@@ -313,20 +313,20 @@ static int convbin(int format, rnxopt_t *opt, const char *ifile, char **file,
 static void setmask(const char *argv, rnxopt_t *opt, int mask)
 {
     char buff[1024],*p;
-    int i,code;
+    int i,code,sys;
     
     strcpy(buff,argv);
     for (p=strtok(buff,",");p;p=strtok(NULL,",")) {
         if (strlen(p)<4||p[1]!='L') continue;
-        if      (p[0]=='G') i=0;
-        else if (p[0]=='R') i=1;
-        else if (p[0]=='E') i=2;
-        else if (p[0]=='J') i=3;
-        else if (p[0]=='S') i=4;
-        else if (p[0]=='C') i=5;
-        else if (p[0]=='I') i=6;
+		if      (p[0]=='G') { i=0; sys = SYS_GPS; }
+        else if (p[0]=='R') { i=1; sys = SYS_GLO; }
+        else if (p[0]=='E') { i=2; sys = SYS_GAL; }
+        else if (p[0]=='J') { i=3; sys = SYS_QZS; }
+        else if (p[0]=='S') { i=4; sys = SYS_SBS; }
+        else if (p[0]=='C') { i=5; sys = SYS_CMP; }
+        else if (p[0]=='I') { i=6; sys = SYS_IRN; }
         else continue;
-        if ((code=obs2code(p+2,NULL))) {
+        if ((code=obs2code(sys,p+2))) {
             opt->mask[i][code-1]=mask?'1':'0';
         }
     }
@@ -345,7 +345,7 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
     opt->navsys=SYS_GPS|SYS_GLO|SYS_GAL|SYS_QZS|SYS_SBS|SYS_CMP;
     opt->scanobs=1;
     
-    for (i=0;i<7;i++) for (j=0;j<64;j++) opt->mask[i][j]='1';
+    for (i=0;i<6;i++) for (j=0;j<64;j++) opt->mask[i][j]='1';
     
     for (i=1;i<argc;i++) {
         if (!strcmp(argv[i],"-ts")&&i+2<argc) {
@@ -492,23 +492,29 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         
         else *ifile=argv[i];
     }
+	if (strlen(fmt) == 0)
+		fmt = "rtcm3";
+	if (opt->trtcm.time == 0.0)
+		opt->trtcm = timeget();
+
     if (span>0.0&&opt->ts.time) {
         opt->te=timeadd(opt->ts,span*3600.0-1e-3);
     }
     if (nf>=1) opt->freqtype|=FREQTYPE_L1;
     if (nf>=2) opt->freqtype|=FREQTYPE_L2;
     if (nf>=3) opt->freqtype|=FREQTYPE_L5;
-    if (nf>=4) opt->freqtype|=FREQTYPE_E6;
-    if (nf>=5) opt->freqtype|=FREQTYPE_E5ab;
-    if (nf>=6) opt->freqtype|=FREQTYPE_S;
+    if (nf>=4) opt->freqtype|=FREQTYPE_L6;
+    if (nf>=5) opt->freqtype|=FREQTYPE_L7;
+    if (nf>=6) opt->freqtype|=FREQTYPE_L8;
+    if (nf>=7) opt->freqtype|=FREQTYPE_L9;
     
     if (*fmt) {
         if      (!strcmp(fmt,"rtcm2")) format=STRFMT_RTCM2;
         else if (!strcmp(fmt,"rtcm3")) format=STRFMT_RTCM3;
         else if (!strcmp(fmt,"nov"  )) format=STRFMT_OEM4;
-        else if (!strcmp(fmt,"cnav" )) format=STRFMT_CNAV;
+        else if (!strcmp(fmt,"oem3" )) format=STRFMT_OEM3;
         else if (!strcmp(fmt,"ubx"  )) format=STRFMT_UBX;
-        else if (!strcmp(fmt,"sbp"  )) format=STRFMT_SBP;
+        else if (!strcmp(fmt,"ss2"  )) format=STRFMT_SS2;
         else if (!strcmp(fmt,"hemis")) format=STRFMT_CRES;
         else if (!strcmp(fmt,"stq"  )) format=STRFMT_STQ;
         else if (!strcmp(fmt,"javad")) format=STRFMT_JAVAD;
@@ -527,7 +533,7 @@ static int cmdopts(int argc, char **argv, rnxopt_t *opt, char **ifile,
         else if (!strcmp(p,".rtcm3"))  format=STRFMT_RTCM3;
         else if (!strcmp(p,".gps"  ))  format=STRFMT_OEM4;
         else if (!strcmp(p,".ubx"  ))  format=STRFMT_UBX;
-        else if (!strcmp(p,".sbp"  ))  format=STRFMT_SBP;
+        else if (!strcmp(p,".log"  ))  format=STRFMT_SS2;
         else if (!strcmp(p,".bin"  ))  format=STRFMT_CRES;
         else if (!strcmp(p,".stq"  ))  format=STRFMT_STQ;
         else if (!strcmp(p,".jps"  ))  format=STRFMT_JAVAD;
@@ -561,7 +567,7 @@ int main(int argc, char **argv)
         fprintf(stderr,"input format can not be recognized\n");
         return -1;
     }
-    sprintf(opt.prog,"%s %s %s",PRGNAME,VER_RTKLIB,PATCH_LEVEL);
+    sprintf(opt.prog,"%s %s",PRGNAME,VER_RTKLIB);
     sprintf(opt.comment[0],"log: %-55.55s",ifile);
     sprintf(opt.comment[1],"format: %s",formatstrs[format]);
     if (*opt.rcvopt) {

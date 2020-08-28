@@ -29,6 +29,8 @@ __fastcall TStrMonDialog::TStrMonDialog(TComponent* Owner)
 	for (int i=0;i<=MAXRCVFMT;i++) {
 		SelFmt->Items->Add(formatstrs[i]);
 	}
+	SelFmt->Items->Add("Aceinna-user");
+	SelFmt->Items->Add("Aceinna-debug");
 	rtcm.outtype=raw.outtype=1;
 }
 //---------------------------------------------------------------------------
@@ -67,8 +69,9 @@ void __fastcall TStrMonDialog::SelFmtChange(TObject *Sender)
 //---------------------------------------------------------------------------
 void __fastcall TStrMonDialog::AddMsg(unsigned char *msg, int len)
 {
-	char buff[256];
+	char buff[1024];
 	int i,n;
+    int ret;
 	
 	if (len<=0) return;
 	
@@ -92,7 +95,7 @@ void __fastcall TStrMonDialog::AddMsg(unsigned char *msg, int len)
 			}
 	    }
 	}
-	else if (StrFmt>=3) { // raw
+	else if (StrFmt>=3 && StrFmt<=18) { // raw
 		for (i=0;i<len;i++) {
 			input_raw(&raw,StrFmt-3,msg[i]);
 			if (raw.msgtype[0]) {
@@ -102,6 +105,24 @@ void __fastcall TStrMonDialog::AddMsg(unsigned char *msg, int len)
 			}
 	    }
 	}
+	else if (StrFmt==19) {
+		for (i=0;i<len;i++) {
+		   ret = input_user_raw(msg[i],NULL,NULL,buff);
+		   if(ret > 0){
+				n = strlen(buff);
+				AddConsole((unsigned char *)buff,n,1);
+           }
+		}
+	}
+	else if (StrFmt==20) {
+		for (i=0;i<len;i++) {
+		   ret = input_debug_raw(msg[i],buff);
+		   if(ret > 0){
+				n = strlen(buff);
+				AddConsole((unsigned char *)buff,n,1);
+           }
+		}
+    }
 	else if (StrFmt>=1) { // HEX/ASC
 		AddConsole(msg,len,StrFmt-1);
 	}

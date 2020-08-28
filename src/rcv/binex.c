@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * binex.c : binex dependent functions
 *
-*          Copyright (C) 2013-2019 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2013-2017 by T.TAKASU, All rights reserved.
 *
 * reference :
 *     [1] UNAVCO, BINEX: Binary exchange format
@@ -18,9 +18,6 @@
 *                          fix bug on unchange-test of beidou ephemeris
 *           2018/10/10 1.7 fix problem of sisa handling in galileo ephemeris
 *                          add receiver option -GALINAV, -GALFNAV
-*           2018/12/06 1.8 fix bug on decoding galileo ephemeirs iode (0x01-04)
-*           2019/05/10 1.9 save galileo E5b data to obs index 2
-*           2019/07/25 1.10 support upgraded galileo ephemeris (0x01-14)
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 
@@ -36,6 +33,11 @@
 
 #define MIN(x,y)    ((x)<(y)?(x):(y))
 
+/* ura table -----------------------------------------------------------------*/
+static const double ura_eph[]={
+    2.4,3.4,4.85,6.85,9.65,13.65,24.0,48.0,96.0,192.0,384.0,768.0,1536.0,
+    3072.0,6144.0,0.0
+};
 /* get fields (big-endian) ---------------------------------------------------*/
 #define U1(p) (*((unsigned char *)(p)))
 #define I1(p) (*((signed char *)(p)))
@@ -120,7 +122,22 @@ static gtime_t adjday(gtime_t time, double tod)
     ep[3]=ep[4]=ep[5]=0.0;
     return timeadd(epoch2time(ep),tod);
 }
-
+/* ura value (m) to ura index ------------------------------------------------*/
+static int uraindex(double value)
+{
+    int i;
+    for (i=0;i<15;i++) if (ura_eph[i]>=value) break;
+    return i;
+}
+/* galileo sisa value (m) to sisa index --------------------------------------*/
+static int sisaindex(double value)
+{
+    if (value< 0.5) return (int)((value    )/0.01);
+    if (value< 1.0) return (int)((value-0.5)/0.02)+ 50;
+    if (value< 2.0) return (int)((value-1.0)/0.04)+ 75;
+    if (value<=6.0) return (int)((value-2.0)/0.16)+100;
+    return 255; /* NAPA */
+}
 /* decode binex mesaage 0x00-00: comment -------------------------------------*/
 static int decode_bnx_00_00(raw_t *raw, unsigned char *buff, int len)
 {
@@ -625,11 +642,11 @@ static int decode_bnx_01_04(raw_t *raw, unsigned char *buff, int len)
     if (eph_sel==2&&!(eph.code&(1<<8))) return 0; /* only F/NAV */
     
     eph.A=sqrtA*sqrtA;
-    eph.iodc=eph.iode;
+    eph.iode=eph.iodc;
     eph.toe=gpst2time(eph.week,eph.toes);
     eph.toc=gpst2time(eph.week,eph.toes);
     eph.ttr=adjweek(eph.toe,tow);
-	eph.sva=ura<0.0?(int)(-ura)-1:sisa_index(ura); /* sisa index */
+    eph.sva=ura<0.0?(int)(-ura)-1:sisaindex(ura); /* sisa index */
     if (!strstr(raw->opt,"-EPHALL")) {
         if (raw->nav.eph[eph.sat-1].iode==eph.iode&&
             raw->nav.eph[eph.sat-1].iodc==eph.iodc) return 0; /* unchanged */
@@ -776,75 +793,6 @@ static int decode_bnx_01_06(raw_t *raw, unsigned char *buff, int len)
     raw->ephsat=eph.sat;
     return 2;
 }
-/* decode binex mesaage 0x01-14: upgraded decoded galileo ephmemeris ---------*/
-static int decode_bnx_01_14(raw_t *raw, unsigned char *buff, int len)
-{
-    eph_t eph={0};
-    unsigned char *p=buff;
-    double tow,ura,sqrtA;
-    int prn,tocs,eph_sel=0;
-    
-    trace(4,"binex 0x01-14: len=%d\n",len);
-    
-    if (strstr(raw->opt,"-GALINAV")) eph_sel=1;
-    if (strstr(raw->opt,"-GALFNAV")) eph_sel=2;
-    
-    if (len>=135) {
-        prn       =U1(p)+1;      p+=1;
-        eph.week  =U2(p);        p+=2; /* gal-week = gps-week */
-        tow       =I4(p);        p+=4;
-        tocs      =I4(p);        p+=4;
-        eph.toes  =I4(p);        p+=4;
-        eph.tgd[0]=R4(p);        p+=4; /* BGD E5a/E1 */
-        eph.tgd[1]=R4(p);        p+=4; /* BGD E5b/E1 */
-        eph.iode  =I4(p);        p+=4; /* IODnav */
-        eph.f2    =R4(p);        p+=4;
-        eph.f1    =R4(p);        p+=4;
-        eph.f0    =R8(p);        p+=8;
-        eph.deln  =R4(p)*SC2RAD; p+=4;
-        eph.M0    =R8(p);        p+=8;
-        eph.e     =R8(p);        p+=8;
-        sqrtA     =R8(p);        p+=8;
-        eph.cic   =R4(p);        p+=4;
-        eph.crc   =R4(p);        p+=4;
-        eph.cis   =R4(p);        p+=4;
-        eph.crs   =R4(p);        p+=4;
-        eph.cuc   =R4(p);        p+=4;
-        eph.cus   =R4(p);        p+=4;
-        eph.OMG0  =R8(p);        p+=8;
-        eph.omg   =R8(p);        p+=8;
-        eph.i0    =R8(p);        p+=8;
-        eph.OMGd  =R4(p)*SC2RAD; p+=4;
-        eph.idot  =R4(p)*SC2RAD; p+=4;
-        ura       =R4(p);        p+=4;
-        eph.svh   =U2(p);        p+=2;
-        eph.code  =U2(p); /* data source defined as rinex 3.03 */
-    }
-    else {
-        trace(2,"binex 0x01-14: length error len=%d\n",len);
-        return -1;
-    }
-    if (!(eph.sat=satno(SYS_GAL,prn))) {
-        trace(2,"binex 0x01-14: satellite error prn=%d\n",prn);
-        return -1;
-    }
-    if (eph_sel==1&&!(eph.code&(1<<9))) return 0; /* only I/NAV */
-    if (eph_sel==2&&!(eph.code&(1<<8))) return 0; /* only F/NAV */
-    
-    eph.A=sqrtA*sqrtA;
-    eph.iodc=eph.iode;
-    eph.toe=gpst2time(eph.week,eph.toes);
-    eph.toc=gpst2time(eph.week,tocs);
-    eph.ttr=adjweek(eph.toe,tow);
-    eph.sva=ura<0.0?(int)(-ura)-1:sisa_index(ura); /* sisa index */
-    if (!strstr(raw->opt,"-EPHALL")) {
-        if (raw->nav.eph[eph.sat-1].iode==eph.iode&&
-            raw->nav.eph[eph.sat-1].iodc==eph.iodc) return 0; /* unchanged */
-    }
-    raw->nav.eph[eph.sat-1]=eph;
-    raw->ephsat=eph.sat;
-    return 2;
-}
 /* decode binex mesaage 0x01: gnss navigaion informtion ----------------------*/
 static int decode_bnx_01(raw_t *raw, unsigned char *buff, int len)
 {
@@ -864,7 +812,6 @@ static int decode_bnx_01(raw_t *raw, unsigned char *buff, int len)
         case 0x04: return decode_bnx_01_04(raw,buff+1,len-1);
         case 0x05: return decode_bnx_01_05(raw,buff+1,len-1);
         case 0x06: return decode_bnx_01_06(raw,buff+1,len-1);
-        case 0x14: return decode_bnx_01_14(raw,buff+1,len-1);
     }
     return 0;
 }
@@ -1044,15 +991,6 @@ static unsigned char *decode_bnx_7f_05_obs(raw_t *raw, unsigned char *buff,
     for (i=0;i<nobs;i++) {
         code2obs(codes[code[i]&0x3F],freq+i);
         pri[i]=getcodepri(sys,codes[code[i]&0x3F],raw->opt);
-        
-        /* frequency index for beidou */
-        if (sys==SYS_CMP) {
-            if      (freq[i]==5) freq[i]=2; /* B2 */
-            else if (freq[i]==4) freq[i]=3; /* B3 */
-        }
-        else if (sys==SYS_GAL) {
-            if (freq[i]==5) freq[i]=2; /* E5b */
-        }
     }
     for (i=0;i<NFREQ;i++) {
         for (j=0,k=-1;j<nobs;j++) {
@@ -1072,7 +1010,7 @@ static unsigned char *decode_bnx_7f_05_obs(raw_t *raw, unsigned char *buff,
             }
             data->P[i]=range[k];
             data->L[i]=wl<=0.0?0.0:phase[k]/wl;
-            data->D[i]=(float)dopp[k];
+            data->D[i]=dopp[k];
             data->SNR[i]=(unsigned char)(cnr[k]/0.25+0.5);
             data->code[i]=codes[code[k]&0x3F];
             data->LLI[i]=slip[k]?1:0;
@@ -1097,7 +1035,7 @@ static unsigned char *decode_bnx_7f_05_obs(raw_t *raw, unsigned char *buff,
             }
             data->P[i]=range[k];
             data->L[i]=wl<=0.0?0.0:phase[k]/wl;
-            data->D[i]=(float)dopp[k];
+            data->D[i]=dopp[k];
             data->SNR[i]=(unsigned char)(cnr[k]/0.25+0.5);
             data->code[i]=codes[code[k]&0x3F];
             data->LLI[i]=slip[k]?1:0;

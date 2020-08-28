@@ -204,15 +204,12 @@
             <BuildOrder>6</BuildOrder>
             <BuildOrder>13</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\src\rcv\swiftnav.c">
+        <CppCompile Include="..\..\..\src\rcv\ss2.c">
             <BuildOrder>6</BuildOrder>
             <BuildOrder>15</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\src\rcv\tersus.c">
             <BuildOrder>28</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\src\rcv\comnav.c">
-            <BuildOrder>29</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\src\rcv\ublox.c">
             <BuildOrder>7</BuildOrder>
@@ -345,14 +342,14 @@
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile Condition="'$(DynamicRTL)'=='true' And '$(Multithreaded)'=='true'" LocalName="$(BDS)\bin\cc32250mt.dll" Class="DependencyModule">
-                    <Platform Name="Win32">
-                        <Overwrite>true</Overwrite>
-                    </Platform>
-                </DeployFile>
                 <DeployFile LocalName="..\..\..\src\rtcm3e.c" Configuration="Release" Class="ProjectFile">
                     <Platform Name="Win32">
                         <RemoteDir>.\</RemoteDir>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
+                <DeployFile Condition="'$(DynamicRTL)'=='true' And '$(Multithreaded)'=='true'" LocalName="$(BDS)\bin\cc32250mt.dll" Class="DependencyModule">
+                    <Platform Name="Win32">
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
@@ -362,7 +359,7 @@
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="..\..\..\src\rcv\swiftnav.c" Configuration="Release" Class="ProjectFile">
+                <DeployFile LocalName="..\..\..\src\rcv\ss2.c" Configuration="Release" Class="ProjectFile">
                     <Platform Name="Win32">
                         <RemoteDir>.\</RemoteDir>
                         <Overwrite>true</Overwrite>
@@ -526,12 +523,6 @@
                     </Platform>
                 </DeployFile>
                 <DeployFile LocalName="..\..\..\src\rcv\tersus.c" Configuration="Release" Class="ProjectFile">
-                    <Platform Name="Win32">
-                        <RemoteDir>.\</RemoteDir>
-                        <Overwrite>true</Overwrite>
-                    </Platform>
-                </DeployFile>
-                <DeployFile LocalName="..\..\..\src\rcv\comnav.c" Configuration="Release" Class="ProjectFile">
                     <Platform Name="Win32">
                         <RemoteDir>.\</RemoteDir>
                         <Overwrite>true</Overwrite>

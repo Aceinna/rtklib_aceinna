@@ -47,8 +47,8 @@ static const char *help[]={
 " -ts ds ts start day/time (ds=y/m/d ts=h:m:s) [obs start time]",
 " -te de te end day/time   (de=y/m/d te=h:m:s) [obs end time]",
 " -ti tint  time interval (sec) [all]",
-" -p mode   mode (0:single,1:dgps,2:kinematic,3:static,4:static-start,",
-"                 5:moving-base,6:fixed,7:ppp-kine,8:ppp-static,9:ppp-fixed) [2]",
+" -p mode   mode (0:single,1:dgps,2:kinematic,3:static,4:moving-base,",
+"                 5:fixed,6:ppp-kinematic,7:ppp-static) [2]",
 " -m mask   elevation mask angle (deg) [15]",
 " -sys s[,s...] nav system(s) (s=G:GPS,R:GLO,E:GAL,J:QZS,C:BDS,I:IRN) [G|R]",
 " -f freq   number of frequencies for relative mode (1:L1,2:L1+L2,3:L1+L2+L5) [2]",
@@ -105,6 +105,8 @@ int main(int argc, char **argv)
     prcopt.navsys=0;
     prcopt.refpos=1;
     prcopt.glomodear=1;
+	prcopt.dynamics = 2;
+	prcopt.outsingle = 1;
     solopt.timef=0;
     sprintf(solopt.prog ,"%s ver.%s %s",PROGNAME,VER_RTKLIB,PATCH_LEVEL);
     sprintf(filopt.trace,"%s.trace",PROGNAME);

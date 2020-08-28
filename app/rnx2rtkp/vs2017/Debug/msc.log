@@ -1,0 +1,7 @@
+﻿cl : 命令行 warning D9035: “Gm”选项已否决，并将在将来的版本中移除
+  prePpp.c
+c:\rtklib_yh\src\rtklib.h(1816): warning C4273: “erfc”: dll 链接不一致
+  c:\program files (x86)\windows kits\10\include\10.0.17763.0\ucrt\corecrt_math.h(501): note: 参见“erfc”的前一个定义
+datum.obj : warning LNK4075: 忽略“/EDITANDCONTINUE”(由于“/SAFESEH”规范)
+    正在创建库 ../../../bin/rnx2rtkp.lib 和对象 ../../../bin/rnx2rtkp.exp
+  msc.vcxproj -> C:\rtklib_yh\app\rnx2rtkp\vs2017\../../../bin/rnx2rtkp.exe
