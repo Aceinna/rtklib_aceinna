@@ -8,3 +8,5 @@ SUBDIRS= rtknavi_qt \
          srctblbrows_qt \
          strsvr_qt \
          rtkconv_qt
+
+app.depends = src

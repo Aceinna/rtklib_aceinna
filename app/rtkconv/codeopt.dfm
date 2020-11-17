@@ -317,7 +317,7 @@ object CodeOptDialog: TCodeOptDialog
     end
   end
   object GroupBox3: TGroupBox
-    Left = 0
+    Left = 1
     Top = 107
     Width = 394
     Height = 69
@@ -612,7 +612,7 @@ object CodeOptDialog: TCodeOptDialog
     Height = 34
     Caption = 'BeiDou'
     TabOrder = 8
-    object C47: TCheckBox
+    object C40: TCheckBox
       Left = 10
       Top = 14
       Width = 35
@@ -657,7 +657,7 @@ object CodeOptDialog: TCodeOptDialog
       Enabled = False
       TabOrder = 1
     end
-    object C48: TCheckBox
+    object C41: TCheckBox
       Left = 48
       Top = 14
       Width = 34

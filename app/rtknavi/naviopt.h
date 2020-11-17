@@ -36,7 +36,6 @@ __published:
 	TComboBox *TropOpt;
 	TComboBox *PosMode;
 	TComboBox *Freq;
-	TComboBox *Solution;
 	TComboBox *SatEphem;
 	TEdit *ExSatsE;
 	TTabSheet *TabSheet2;
@@ -203,9 +202,6 @@ __published:
 	TButton *BtnEOPFile;
 	TSpeedButton *BtnEOPView;
 	TComboBox *ElMask;
-	TEdit *ThresAR2;
-	TEdit *ThresAR3;
-	TLabel *Label12;
 	TCheckBox *PosOpt1;
 	TCheckBox *PosOpt2;
 	TCheckBox *PosOpt3;
@@ -230,6 +226,23 @@ __published:
 	TCheckBox *NavSys7;
 	TComboBox *OutputSingle;
 	TEdit *MaxSolStd;
+    TLabel *Label49;
+    TEdit *MinFixSats;
+    TEdit *MinHoldSats;
+    TComboBox *ARFilter;
+    TEdit *MaxPosVarAR;
+    TLabel *Label50;
+    TComboBox *RcvStds;
+    TEdit *MinDropSats;
+    TEdit *VarHoldAmb;
+    TEdit *GainHoldAmb;
+    TLabel *Label51;
+    TLabel *Label52;
+    TEdit *GloHwBias;
+	TLabel *Label12;
+	TComboBox *ObsWeightMode;
+	TLabel *Label53;
+	TEdit *Edit1;
 	void __fastcall BtnOkClick(TObject *Sender);
 	void __fastcall RovAntPcvClick(TObject *Sender);
 	void __fastcall FormShow(TObject *Sender);
@@ -270,6 +283,7 @@ __published:
 	void __fastcall BtnTLEFileClick(TObject *Sender);
 	void __fastcall BtnSnrMaskClick(TObject *Sender);
 	void __fastcall NavSys6Click(TObject *Sender);
+	void __fastcall ObsWeightChange(TObject *Sender);
 private:
 	void __fastcall GetOpt(void);
 	void __fastcall SetOpt(void);

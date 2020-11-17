@@ -54,8 +54,7 @@
 #include "ui_navimain.h"
 #include "navimain.h"
 #include "graph.h"
-
-#include <locale.h>
+#include "locale.h"
 
 MainWindow *mainForm;
 
@@ -938,9 +937,8 @@ void  MainWindow::SvrStart(void)
     int itype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPCLI,STR_FILE,STR_FTP,STR_HTTP};
     int otype[]={STR_SERIAL,STR_TCPCLI,STR_TCPSVR,STR_NTRIPSVR,STR_FILE};
     int i,strs[MAXSTRRTK]={0},sat,ex,stropt[8]={0};
-    char *paths[8],*cmds[3]={0},*rcvopts[3]={0};
+    char *paths[8],*cmds[3]={0},*cmds_periodic[3]={0},*rcvopts[3]={0};
     char buff[1024],*p;
-    char errmsg[1024],*cmds_periods[3]={0};
     gtime_t time=timeget();
     pcvs_t pcvr,pcvs;
     pcv_t *pcv;
@@ -1049,10 +1047,12 @@ void  MainWindow::SvrStart(void)
         cmds[i][0]=rcvopts[i][0]='\0';
         if (strs[i]==STR_SERIAL) {
             if (CmdEna[i][0]) strcpy(cmds[i],qPrintable(Cmds[i][0]));
+            if (CmdEna[i][2]) strcpy(cmds_periodic[i],qPrintable(Cmds[i][2]));
         }
         else if (strs[i]==STR_TCPCLI||strs[i]==STR_TCPSVR||
                  strs[i]==STR_NTRIPCLI) {
             if (CmdEnaTcp[i][0]) strcpy(cmds[i],qPrintable(CmdsTcp[i][0]));
+            if (CmdEnaTcp[i][2]) strcpy(cmds_periodic[i],qPrintable(CmdsTcp[i][2]));
         }
         strcpy(rcvopts[i],qPrintable(RcvOpt[i]));
     }
@@ -1091,11 +1091,13 @@ void  MainWindow::SvrStart(void)
     stropt[3]=SvrBuffSize;
     stropt[4]=FileSwapMargin;
     strsetopt(stropt);
-    
+
     // start rtk server
+    char* errmsg;
     if (!rtksvrstart(&rtksvr,SvrCycle,SvrBuffSize,strs,paths,Format,NavSelect,
-                     cmds,cmds_periods,rcvopts,NmeaCycle,NmeaReq,nmeapos,&PrcOpt,solopt,
-                     &monistr,errmsg)) {
+                     cmds,cmds_periodic,rcvopts,NmeaCycle,NmeaReq,nmeapos,&PrcOpt,solopt,
+                     &monistr, errmsg)) {
+
         traceclose();
         for (i=0;i<8;i++) delete[] paths[i];
         for (i=0;i<3;i++) delete[] rcvopts[i];

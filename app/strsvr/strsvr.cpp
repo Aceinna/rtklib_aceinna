@@ -4,17 +4,17 @@
 //---------------------------------------------------------------------------
 
 
-USEFORM("..\appcmn\refdlg.cpp", RefDialog);
-USEFORM("..\appcmn\keydlg.cpp", KeyDialog);
 USEFORM("..\appcmn\serioptdlg.cpp", SerialOptDialog);
-USEFORM("..\appcmn\viewer.cpp", TextViewer);
+USEFORM("..\appcmn\refdlg.cpp", RefDialog);
 USEFORM("..\appcmn\tcpoptdlg.cpp", TcpOptDialog);
+USEFORM("..\appcmn\vieweropt.cpp", ViewerOptDialog);
+USEFORM("..\appcmn\viewer.cpp", TextViewer);
+USEFORM("..\appcmn\keydlg.cpp", KeyDialog);
 USEFORM("..\appcmn\cmdoptdlg.cpp", CmdOptDialog);
 USEFORM("..\appcmn\aboutdlg.cpp", AboutDialog);
 USEFORM("..\appcmn\confdlg.cpp", ConfDialog);
 USEFORM("..\appcmn\ftpoptdlg.cpp", FtpOptDialog);
 USEFORM("..\appcmn\fileoptdlg.cpp", FileOptDialog);
-USEFORM("..\appcmn\vieweropt.cpp", ViewerOptDialog);
 USEFORM("svroptdlg.cpp", SvrOptDialog);
 USEFORM("mondlg.cpp", StrMonDialog);
 USEFORM("convdlg.cpp", ConvDialog);
@@ -40,6 +40,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		Application->CreateForm(__classid(TStrMonDialog), &StrMonDialog);
 		Application->CreateForm(__classid(TTextViewer), &TextViewer);
 		Application->CreateForm(__classid(TViewerOptDialog), &ViewerOptDialog);
+		Application->CreateForm(__classid(TConfDialog), &ConfDialog);
 		Application->Run();
 	}
 	catch (Exception &exception)

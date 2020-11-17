@@ -220,7 +220,6 @@ __published:
 	TSavePictureDialog *SaveImageDialog;
 	TMenuItem *N15;
 	TMenuItem *MenuGE;
-	TSpeedButton *BtnGE;
 	TComboBox *FrqType;
 	TComboBox *ObsType2;
 	TMenuItem *MenuVisAna;
@@ -356,8 +355,6 @@ __published:
 	void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
 	void __fastcall MenuSaveDopClick(TObject *Sender);
 	void __fastcall MenuSaveImageClick(TObject *Sender);
-	void __fastcall MenuGEClick(TObject *Sender);
-	void __fastcall BtnGEClick(TObject *Sender);
 	void __fastcall MenuVisAnaClick(TObject *Sender);
 	void __fastcall BtnOptionsClick(TObject *Sender);
 	void __fastcall BtnFixCentClick(TObject *Sender);
@@ -369,7 +366,6 @@ __published:
 	void __fastcall MenuSkyImgClick(TObject *Sender);
 	void __fastcall MenuShowSkyplotClick(TObject *Sender);
 	void __fastcall BtnShowSkyplotClick(TObject *Sender);
-	void __fastcall MenuPlotGEClick(TObject *Sender);
 	void __fastcall MenuPlotGMClick(TObject *Sender);
 	void __fastcall MenuPlotGEGMClick(TObject *Sender);
 	void __fastcall MenuMaxClick(TObject *Sender);

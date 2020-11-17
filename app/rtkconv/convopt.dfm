@@ -377,8 +377,8 @@ object ConvOptDialog: TConvOptDialog
     end
   end
   object TraceLevel: TComboBox
-    Left = 190
-    Top = 326
+    Left = 188
+    Top = 327
     Width = 63
     Height = 21
     Style = csDropDownList
@@ -420,52 +420,44 @@ object ConvOptDialog: TConvOptDialog
     object Freq2: TCheckBox
       Left = 42
       Top = 14
-      Width = 37
+      Width = 52
       Height = 17
-      Caption = 'L2'
+      Caption = 'L2/E5b'
       Checked = True
       State = cbChecked
       TabOrder = 1
     end
-    object Freq3: TCheckBox
-      Left = 74
-      Top = 14
-      Width = 53
-      Height = 17
-      Caption = 'L5/3'
+    object Freq4: TCheckBox
+      Left = 100
+      Top = 16
+      Width = 45
+      Height = 13
+      Caption = 'L5'
       TabOrder = 2
     end
-    object Freq4: TCheckBox
-      Left = 113
-      Top = 14
-      Width = 45
-      Height = 17
-      Caption = 'L6'
+    object Freq5: TCheckBox
+      Left = 135
+      Top = 11
+      Width = 39
+      Height = 24
+      Caption = 'E6'
       TabOrder = 3
     end
-    object Freq5: TCheckBox
-      Left = 145
+    object Freq6: TCheckBox
+      Left = 174
       Top = 14
-      Width = 39
+      Width = 40
       Height = 17
-      Caption = 'L7'
+      Caption = 'E5ab'
       TabOrder = 4
     end
-    object Freq6: TCheckBox
-      Left = 177
-      Top = 14
-      Width = 31
-      Height = 17
-      Caption = 'L8'
-      TabOrder = 5
-    end
     object Freq7: TCheckBox
-      Left = 209
+      Left = 218
       Top = 14
       Width = 31
       Height = 17
-      Caption = 'L9'
-      TabOrder = 6
+      Caption = 'S'
+      TabOrder = 5
     end
   end
   object ExSats: TEdit
@@ -534,6 +526,8 @@ object ConvOptDialog: TConvOptDialog
       Width = 71
       Height = 15
       Caption = 'GLO'
+      Checked = True
+      State = cbChecked
       TabOrder = 1
     end
     object Nav3: TCheckBox

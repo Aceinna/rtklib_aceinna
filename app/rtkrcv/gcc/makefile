@@ -5,11 +5,12 @@ SRC    = ../../../src
 
 # for beagleboard
 #CTARGET= -mfpu=neon -mfloat-abi=softfp -ffast-math
-CTARGET= -DENAGLO -DENAQZS -DENACMP -DENAGAL -DENAIRN -DNFREQ=3 -DSVR_REUSEADDR
+CTARGET= -DENAGLO -DENAQZS -DENACMP -DENAGAL -DENAIRN -DNFREQ=4 -DNEXOBS=3 -DSVR_REUSEADDR
 
 CFLAGS = -Wall -O3 -ansi -pedantic -Wno-unused-but-set-variable -I$(SRC) -I.. -DTRACE $(CTARGET) -g
 
-ifeq ($(shell uname -s), Darwin)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S), Darwin)
 	LDLIBS  = -lm -lpthread
 else
 	LDLIBS  = -lm -lrt -lpthread
@@ -18,9 +19,9 @@ endif
 all        : rtkrcv
 rtkrcv     : rtkrcv.o vt.o rtkcmn.o rtksvr.o rtkpos.o geoid.o solution.o lambda.o
 rtkrcv     : sbas.o stream.o rcvraw.o rtcm.o preceph.o options.o pntpos.o ppp.o ppp_ar.o
-rtkrcv     : novatel.o ublox.o ss2.o crescent.o skytraq.o gw10.o javad.o nvs.o binex.o
+rtkrcv     : novatel.o ublox.o swiftnav.o crescent.o skytraq.o gw10.o javad.o nvs.o binex.o
 rtkrcv     : rt17.o ephemeris.o rinex.o ionex.o rtcm2.o rtcm3.o rtcm3e.o qzslex.o
-rtkrcv     : ppp_corr.o tides.o septentrio.o cmr.o tersus.o
+rtkrcv     : ppp_corr.o tides.o septentrio.o cmr.o tersus.o comnav.o
 
 rtkrcv.o   : ../rtkrcv.c
 	$(CC) -c $(CFLAGS) ../rtkrcv.c
@@ -66,8 +67,8 @@ novatel.o  : $(SRC)/rcv/novatel.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/novatel.c
 ublox.o    : $(SRC)/rcv/ublox.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/ublox.c
-ss2.o      : $(SRC)/rcv/ss2.c
-	$(CC) -c $(CFLAGS) $(SRC)/rcv/ss2.c
+swiftnav.o : $(SRC)/rcv/swiftnav.c
+	$(CC) -c $(CFLAGS) $(SRC)/rcv/swiftnav.c
 crescent.o : $(SRC)/rcv/crescent.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/crescent.c
 skytraq.o  : $(SRC)/rcv/skytraq.c
@@ -100,6 +101,8 @@ cmr.o      : $(SRC)/rcv/cmr.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/cmr.c
 tersus.o   : $(SRC)/rcv/tersus.c
 	$(CC) -c $(CFLAGS) $(SRC)/rcv/tersus.c
+comnav.o   : $(SRC)/rcv/comnav.c
+	$(CC) -c $(CFLAGS) $(SRC)/rcv/comnav.c
 
 rtkrcv.o   : $(SRC)/rtklib.h ../vt.h
 rtkcmn.o   : $(SRC)/rtklib.h
@@ -120,7 +123,7 @@ pntpos.o   : $(SRC)/rtklib.h
 ppp.o      : $(SRC)/rtklib.h
 novatel.o  : $(SRC)/rtklib.h
 ublox.o    : $(SRC)/rtklib.h
-ss2.o      : $(SRC)/rtklib.h
+swiftnav.o : $(SRC)/rtklib.h
 crescent.o : $(SRC)/rtklib.h
 skytraq.o  : $(SRC)/rtklib.h
 gw10.o     : $(SRC)/rtklib.h
@@ -131,6 +134,7 @@ rt17.o     : $(SRC)/rtklib.h
 septentrio.o: $(SRC)/rtklib.h
 cmr.o      : $(SRC)/rtklib.h
 tersus.o   : $(SRC)/rtklib.h
+comnav.o   : $(SRC)/rtklib.h
 ephemeris.o: $(SRC)/rtklib.h
 rinex.o    : $(SRC)/rtklib.h
 ionex.o    : $(SRC)/rtklib.h
@@ -152,4 +156,3 @@ test3:
 
 clean:
 	rm -f rtkrcv rtkrcv.exe rtkrcv.nav *.o *.out *.trace
-

@@ -1,14 +1,15 @@
 /*------------------------------------------------------------------------------
 * tersus.c : Tersus Precis receiver functions
 *
-*          Copyright (C) 2017 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2017-2019 by T.TAKASU, All rights reserved.
 *
 * reference :
 *     [1] Tersus GNSS Inc., Command & Log Reference For Precis-BX306 & BX316
 *         GNSS RTK Board, Version V1.0-20170421
 *
 * version : $Revision:$ $Date:$
-* history : 2017/05/26 1.0 new
+* history : 2017/05/26 1.0  new
+*           2019/05/10 1.1  save galileo E5b data to obs index 2
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 
@@ -71,17 +72,6 @@ static int obsindex(obs_t *obs, gtime_t time, int sat)
         obs->data[i].code[j]=CODE_NONE;
     }
     obs->n++;
-    return i;
-}
-/* ura value (m) to ura index ------------------------------------------------*/
-static int uraindex(double value)
-{
-    static const double ura_eph[]={
-        2.4,3.4,4.85,6.85,9.65,13.65,24.0,48.0,96.0,192.0,384.0,768.0,1536.0,
-        3072.0,6144.0,0.0
-    };
-    int i;
-    for (i=0;i<15;i++) if (ura_eph[i]>=value) break;
     return i;
 }
 /* decode tersus tracking status -----------------------------------------------
@@ -148,7 +138,7 @@ static int decode_trackstat(unsigned int stat, int *sys, int *code, int *track,
             case  1: freq=0; *code=CODE_L1B; break; /* E1B */
             case  2: freq=0; *code=CODE_L1C; break; /* E1C */
             case 12: freq=2; *code=CODE_L5Q; break; /* E5aQ */
-            case 17: freq=4; *code=CODE_L7Q; break; /* E5bQ */
+            case 17: freq=1; *code=CODE_L7Q; break; /* E5bQ */
             case 20: freq=5; *code=CODE_L8Q; break; /* AltBOCQ */
             default: freq=-1; break;
         }
@@ -194,7 +184,6 @@ static int checkpri(const char *opt, int sys, int code, int freq)
     else if (sys==SYS_GAL) {
         if (strstr(opt,"-EL1B")&&freq==0) return code==CODE_L1B?0:-1;
         if (code==CODE_L1B) return nex<1?-1:NFREQ;
-        if (code==CODE_L7Q) return nex<2?-1:NFREQ+1;
         if (code==CODE_L8Q) return nex<3?-1:NFREQ+2;
     }
     return freq<NFREQ?freq:-1;
@@ -363,6 +352,11 @@ static int decode_rangecmpb(raw_t *raw)
             raw->obs.data[index].LLI[pos]=(unsigned char)lli;
             raw->obs.data[index].code[pos]=code;
         }
+#if 0 /* for debug */
+        trace(3,"sys=%d prn=%3d cp=%12.5f lli=%2d plock=%2d clock=%2d lockt=%4.2f halfc=%2d parity=%2d ts=%s\n",
+              sys,prn,adr,lli,plock,clock,lockt,halfc,parity,time_str(raw->tobs,3));
+#endif
+
     }
     return 1;
 }
@@ -436,7 +430,7 @@ static int decode_gpsephemb(raw_t *raw)
     eph.toc=gpst2time(eph.week,toc);
     eph.ttr=adjweek(eph.toe,tow);
     eph.sva=uraindex(ura);
-    
+
     if (!strstr(raw->opt,"-EPHALL")) {
         if (timediff(raw->nav.eph[eph.sat-1].toe,eph.toe)==0.0&&
             raw->nav.eph[eph.sat-1].iode==eph.iode&&

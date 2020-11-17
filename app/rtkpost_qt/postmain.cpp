@@ -58,8 +58,7 @@
 #include "keydlg.h"
 #include "aboutdlg.h"
 #include "viewer.h"
-
-#include <locale.h>
+#include "locale.h"
 
 #define PRGNAME     "RTKPOST-QT"
 #define MAXHIST     20

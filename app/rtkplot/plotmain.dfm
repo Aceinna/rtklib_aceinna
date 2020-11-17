@@ -3,7 +3,7 @@ object Plot: TPlot
   Top = 0
   Caption = 'RTKPLOT'
   ClientHeight = 464
-  ClientWidth = 634
+  ClientWidth = 737
   Color = clWindow
   Constraints.MinHeight = 320
   Constraints.MinWidth = 320
@@ -28,7 +28,7 @@ object Plot: TPlot
   object Panel3: TPanel
     Left = 0
     Top = 25
-    Width = 634
+    Width = 737
     Height = 421
     Align = alClient
     BevelOuter = bvNone
@@ -39,7 +39,7 @@ object Plot: TPlot
       AlignWithMargins = True
       Left = 154
       Top = 0
-      Width = 479
+      Width = 582
       Height = 421
       Margins.Left = 1
       Margins.Top = 0
@@ -56,9 +56,8 @@ object Plot: TPlot
       OnMouseMove = DispMouseMove
       OnMouseUp = DispMouseUp
       OnPaint = DispPaint
-      ExplicitLeft = 136
-      ExplicitWidth = 497
-      ExplicitHeight = 442
+      ExplicitLeft = 156
+      ExplicitTop = -1
     end
     object Splitter1: TSplitter
       Left = 150
@@ -196,7 +195,6 @@ object Plot: TPlot
             'NMEA (*.nmea)'
             'Solution Status (*.stat)'
             'All (*.*)')
-          ExplicitWidth = 150
         end
       end
     end
@@ -204,7 +202,7 @@ object Plot: TPlot
   object Panel2: TPanel
     Left = 0
     Top = 446
-    Width = 634
+    Width = 737
     Height = 18
     Align = alBottom
     BevelOuter = bvNone
@@ -212,7 +210,7 @@ object Plot: TPlot
     ParentBackground = False
     TabOrder = 0
     object BtnMessage2: TSpeedButton
-      Left = 618
+      Left = 721
       Top = 0
       Width = 16
       Height = 18
@@ -232,7 +230,7 @@ object Plot: TPlot
       ExplicitTop = -1
     end
     object Panel22: TPanel
-      Left = 440
+      Left = 543
       Top = 0
       Width = 178
       Height = 18
@@ -264,7 +262,7 @@ object Plot: TPlot
     object Panel21: TPanel
       Left = 0
       Top = 0
-      Width = 440
+      Width = 543
       Height = 18
       Align = alClient
       AutoSize = True
@@ -369,7 +367,7 @@ object Plot: TPlot
   object Panel1: TPanel
     Left = 0
     Top = 0
-    Width = 634
+    Width = 737
     Height = 25
     Margins.Left = 1
     Margins.Top = 1
@@ -381,7 +379,7 @@ object Plot: TPlot
     ParentBackground = False
     TabOrder = 1
     object Panel11: TPanel
-      Left = 434
+      Left = 537
       Top = 0
       Width = 200
       Height = 25
@@ -537,7 +535,7 @@ object Plot: TPlot
     object Panel10: TPanel
       Left = 0
       Top = 0
-      Width = 541
+      Width = 518
       Height = 25
       Margins.Left = 1
       Margins.Top = 1
@@ -1041,40 +1039,6 @@ object Plot: TPlot
         ExplicitLeft = 459
         ExplicitTop = -1
       end
-      object BtnGE: TSpeedButton
-        Left = 495
-        Top = 0
-        Width = 23
-        Height = 25
-        Hint = 'Google Earth View'
-        Align = alLeft
-        Flat = True
-        Glyph.Data = {
-          3E020000424D3E0200000000000036000000280000000D0000000D0000000100
-          1800000000000802000000000000000000000000000000000000FFFFFFFFFFFF
-          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-          FF00FFFFFFFFFFFFFFFFFFFFFFFFCC483FCC483FCC483FCC483FCC483FFFFFFF
-          FFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFCC483FCC483FCC483FFFFFFCFF
-          FFFCFFFFFCCC483FFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFCC483FCC483FFFFF
-          FCFFFFFCFFFFFCCC483FCC483FCC483FCC483FFFFFFFFFFFFF00FFFFFFCC483F
-          FFFFFCFFFFFCFFFFFCCC483FCC483FCC483FCC483FCC483FFFFFFCCC483FFFFF
-          FF00FFFFFFCC483FFFFFFCCC483FCC483FCC483FCC483FCC483FFFFFFCFFFFFC
-          FFFFFCCC483FFFFFFF00FFFFFFCC483FCC483FCC483FCC483FCC483FFFFFFCFF
-          FFFCFFFFFCFFFFFCCC483FCC483FFFFFFF00FFFFFFCC483FCC483FCC483FCC48
-          3FFFFFFCFFFFFCFFFFFCCC483FCC483FCC483FCC483FFFFFFF00FFFFFFCC483F
-          CC483FCC483FFFFFFCFFFFFCCC483FCC483FCC483FFFFFFCFFFFFCCC483FFFFF
-          FF00FFFFFFFFFFFFCC483FFFFFFCFFFFFCCC483FCC483FCC483FFFFFFCFFFFFC
-          CC483FFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFCC483FCC483FCC483FCC483FFF
-          FFFCFFFFFCCC483FFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFFFFFFFFFFFCC48
-          3FCC483FCC483FCC483FCC483FFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFF
-          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-          FF00}
-        ParentShowHint = False
-        ShowHint = True
-        Spacing = 1
-        OnClick = BtnGEClick
-        ExplicitLeft = 473
-      end
       object BtnFixCent: TSpeedButton
         Left = 334
         Top = 0
@@ -1113,7 +1077,7 @@ object Plot: TPlot
         ExplicitTop = 1
       end
       object BtnGM: TSpeedButton
-        Left = 518
+        Left = 495
         Top = 0
         Width = 23
         Height = 25
@@ -1603,7 +1567,7 @@ object Plot: TPlot
       end
     end
     object Panel12: TPanel
-      Left = 541
+      Left = 518
       Top = 0
       Width = 140
       Height = 25
@@ -1963,7 +1927,6 @@ object Plot: TPlot
       end
       object MenuGE: TMenuItem
         Caption = '&Google Earth View...'
-        OnClick = MenuGEClick
       end
       object MenuGM: TMenuItem
         Caption = 'Google &Map View...'
@@ -2059,7 +2022,6 @@ object Plot: TPlot
       end
       object MenuPlotGE: TMenuItem
         Caption = 'Plot - GE View Horizontal'
-        OnClick = MenuPlotGEClick
       end
       object MenuPlotGM: TMenuItem
         Caption = 'Plot - GM View Horizontal'

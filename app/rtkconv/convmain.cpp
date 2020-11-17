@@ -38,7 +38,6 @@ TMainWindow *MainWindow;
 #define PRGNAME		"RTKCONV"  // program name
 #define MAXHIST		20		   // max number of histories
 #define TSTARTMARGIN 60.0	   // time margin for file name replacement
-#define TRACEFILE	"rtkconv.trace" // trace file
 
 static int abortf=0;
 
@@ -83,7 +82,7 @@ void __fastcall TMainWindow::FormCreate(TObject *Sender)
 {
 	AnsiString s;
 	
-	Caption=s.sprintf("%s ver.%s %s",PRGNAME,VER_RTKLIB,PATCH_LEVEL);
+	Caption=s.sprintf("%s ver:%s %s",PRGNAME,VER_RTKLIB,PATCH_LEVEL);
 	
 	::DragAcceptFiles(Handle,true);
 }
@@ -788,7 +787,7 @@ void __fastcall TMainWindow::ConvertFile(void)
 	AnsiString OutFile9_Text=OutFile9->Text;
 	int i,format,sat;
 	char file[1024]="",*ofile[9],ofile_[9][1024]={""},msg[256],*p;
-	char buff[256],tstr[32];
+	char buff[256],tstr[32],tracefile[1024];
 	double RNXVER[]={2.10,2.11,2.12,3.00,3.01,3.02,3.03};
 	FILE *fp;
 	
@@ -802,7 +801,7 @@ void __fastcall TMainWindow::ConvertFile(void)
 		else if (!strcmp(p,".rtcm3")) format=STRFMT_RTCM3;
 		else if (!strcmp(p,".gps"  )) format=STRFMT_OEM4;
 		else if (!strcmp(p,".ubx"  )) format=STRFMT_UBX;
-		else if (!strcmp(p,".log"  )) format=STRFMT_SS2;
+		else if (!strcmp(p,".sbp"  )) format=STRFMT_SBP;
 		else if (!strcmp(p,".bin"  )) format=STRFMT_CRES;
 		else if (!strcmp(p,".jps"  )) format=STRFMT_JAVAD;
 		else if (!strcmp(p,".bnx"  )) format=STRFMT_BINEX;
@@ -927,7 +926,9 @@ void __fastcall TMainWindow::ConvertFile(void)
 	Message		->Caption="";
 	
 	if (TraceLevel>0) {
-		traceopen(TRACEFILE);
+		strcpy(tracefile,ofile[0]);
+		strcat(tracefile,".trace");
+		traceopen(tracefile);
 		tracelevel(TraceLevel);
 	}
 	// convert to rinex
@@ -976,7 +977,7 @@ void __fastcall TMainWindow::LoadOpt(void)
 	TIniFile *ini=new TIniFile(IniFile);
 	AnsiString mask="1111111111111111111111111111111111111111111111111111111";
 	
-	RnxVer				=ini->ReadInteger("opt","rnxver",	   0);
+	RnxVer				=ini->ReadInteger("opt","rnxver",	   6);
 	RnxFile				=ini->ReadInteger("opt","rnxfile",	   0);
 	RnxCode				=ini->ReadString ("opt","rnxcode","0000");
 	RunBy				=ini->ReadString ("opt","runby",	  "");
@@ -1000,7 +1001,7 @@ void __fastcall TMainWindow::LoadOpt(void)
 	Comment[0]			=ini->ReadString ("opt","comment0",   "");
 	Comment[1]			=ini->ReadString ("opt","comment1",   "");
 	RcvOption			=ini->ReadString ("opt","rcvoption",  "");
-	NavSys				=ini->ReadInteger("opt","navsys",	 0x3);
+	NavSys				=ini->ReadInteger("opt","navsys",	 0x5);
 	ObsType				=ini->ReadInteger("opt","obstype",	 0xF);
 	FreqType			=ini->ReadInteger("opt","freqtype",  0x3);
 	ExSats				=ini->ReadString ("opt","exsats",	  "");
@@ -1014,7 +1015,7 @@ void __fastcall TMainWindow::LoadOpt(void)
 	CodeMask[5]			=ini->ReadString ("opt","codemask_6",mask);
 	CodeMask[6]			=ini->ReadString ("opt","codemask_7",mask);
 	AutoPos				=ini->ReadInteger("opt","autopos",	   0);
-	ScanObs				=ini->ReadInteger("opt","scanobs",	   0);
+	ScanObs				=ini->ReadInteger("opt","scanobs",	   1);
 	HalfCyc				=ini->ReadInteger("opt","halfcyc",	   0);
 	OutIono				=ini->ReadInteger("opt","outiono",	   0);
 	OutTime				=ini->ReadInteger("opt","outtime",	   0);

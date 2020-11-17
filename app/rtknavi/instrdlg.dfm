@@ -540,13 +540,16 @@ object InputStrDialog: TInputStrDialog
     TabOrder = 35
     Text = '10'
   end
-  object Chk64Bit: TCheckBox
+  object Time64BitL: TComboBox
     Left = 166
-    Top = 233
-    Width = 40
-    Height = 17
-    Caption = '64bit'
+    Top = 232
+    Width = 48
+    Height = 21
     TabOrder = 36
+    Text = '32bit'
+    Items.Strings = (
+      '32bit'
+      '64bit')
   end
   object OpenDialog: TOpenDialog
     Filter = 

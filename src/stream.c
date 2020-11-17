@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * stream.c : stream input/output functions
 *
-*          Copyright (C) 2008-2018 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2008-2019 by T.TAKASU, All rights reserved.
 *
 * options : -DWIN32    use WIN32 API
 *           -DSVR_REUSEADDR reuse tcp server address
@@ -62,6 +62,8 @@
 *                           fix bug on file playback as slave mode
 *                           fix bug on timeset() in gpst instead of utc
 *                           update trace levels and buffer sizes
+*           2019/05/10 1.27 fix bug on dropping message on tcp stream (#144)
+*           2019/08/19 1.28 support 460800 and 921600 bps for serial
 *-----------------------------------------------------------------------------*/
 #include <ctype.h>
 #include "rtklib.h"
@@ -92,7 +94,7 @@
 #define MAXSTATMSG          32          /* max length of status message */
 #define DEFAULT_MEMBUF_SIZE 4096        /* default memory buffer size (bytes) */
 
-#define NTRIP_AGENT         "RTKLIB/" VER_RTKLIB
+#define NTRIP_AGENT         "RTKLIB/" VER_RTKLIB "_" PATCH_LEVEL
 #define NTRIP_CLI_PORT      2101        /* default ntrip-client connection port */
 #define NTRIP_SVR_PORT      80          /* default ntrip-server connection port */
 #define NTRIP_MAXRSP        32768       /* max size of ntrip response */
@@ -334,10 +336,11 @@ static DWORD WINAPI serialthread(void *arg)
 static serial_t *openserial(const char *path, int mode, char *msg)
 {
     const int br[]={
-        300,600,1200,2400,4800,9600,19200,38400,57600,115200,230400
+        300,600,1200,2400,4800,9600,19200,38400,57600,115200,230400,460800,
+        921600
     };
     serial_t *serial;
-    int i,brate=9600,bsize=8,stopb=1,tcp_port=0;
+    int i,brate=115200,bsize=8,stopb=1,tcp_port=0;
     char *p,parity='N',dev[128],port[128],fctr[64]="",path_tcp[32],msg_tcp[128];
 #ifdef WIN32
     DWORD error,rw=0,siz=sizeof(COMMCONFIG);
@@ -345,9 +348,17 @@ static serial_t *openserial(const char *path, int mode, char *msg)
     COMMTIMEOUTS co={MAXDWORD,0,0,0,0}; /* non-block-read */
     char dcb[64]="";
 #else
+
+#ifdef __APPLE__
+    /* MacOS doesn't support higher baudrates (>230400B) */
     const speed_t bs[]={
         B300,B600,B1200,B2400,B4800,B9600,B19200,B38400,B57600,B115200,B230400
     };
+#else /* regular Linux with higher baudrates */
+    const speed_t bs[]={
+        B300,B600,B1200,B2400,B4800,B9600,B19200,B38400,B57600,B115200,B230400,B460800,B921600
+    };
+#endif /* ifdef __APPLE__ */
     struct termios ios={0};
     int rw=0;
 #endif
@@ -364,8 +375,8 @@ static serial_t *openserial(const char *path, int mode, char *msg)
     if ((p=strchr(path,'#'))) {
         sscanf(p,"#%d",&tcp_port);
     }
-    for (i=0;i<11;i++) if (br[i]==brate) break;
-    if (i>=12) {
+    for (i=0;i<13;i++) if (br[i]==brate) break;
+    if (i>=14) {
         sprintf(msg,"bitrate error (%d)",brate);
         tracet(1,"openserial: %s path=%s\n",msg,path);
         free(serial);
@@ -572,7 +583,9 @@ static int openfile_(file_t *file, gtime_t time, char *msg)
     }
     /* replace keywords */
     reppath(file->path,file->openpath,time,"","");
-    
+	//zc::add
+	set_base_user_file_name(file->openpath);
+	set_base_aceinna_file_name(file->openpath);
     /* create directory */
     if ((file->mode&STR_MODE_W)&&!(file->mode&STR_MODE_R)) {
         createdir(file->openpath);
@@ -1238,7 +1251,6 @@ static int readtcpsvr(tcpsvr_t *tcpsvr, unsigned char *buff, int n, char *msg)
             }
             discontcp(&tcpsvr->cli[i],ticonnect);
             updatetcpsvr(tcpsvr,msg);
-            return 0;
         }
         if (nr>0) {
             tcpsvr->cli[i].tact=tickget();
@@ -1266,7 +1278,6 @@ static int writetcpsvr(tcpsvr_t *tcpsvr, unsigned char *buff, int n, char *msg)
             }
             discontcp(&tcpsvr->cli[i],ticonnect);
             updatetcpsvr(tcpsvr,msg);
-            return 0;
         }
         if (ns>0) tcpsvr->cli[i].tact=tickget();
     }
@@ -1582,6 +1593,7 @@ static int rspntrip_c(ntrip_t *ntrip, char *msg)
         ntrip->state=2;
         sprintf(msg,"%s/%s",ntrip->tcp->svr.saddr,ntrip->mntpnt);
         tracet(3,"rspntrip_c: response ok nb=%d\n",ntrip->nb);
+        ntrip->tcp->tirecon=ticonnect;
         return 1;
     }
     if ((p=strstr((char *)ntrip->buff,NTRIP_RSP_SRCTBL))) { /* source table */
@@ -1596,6 +1608,8 @@ static int rspntrip_c(ntrip_t *ntrip, char *msg)
         ntrip->nb=0;
         ntrip->buff[0]='\0';
         ntrip->state=0;
+        /* increase subsequent disconnect time to avoid too many reconnect requests */
+        if (ntrip->tcp->tirecon>300000) ntrip->tcp->tirecon=ntrip->tcp->tirecon*5/4;
         discontcp(&ntrip->tcp->svr,ntrip->tcp->tirecon);
     }
     else if ((p=strstr((char *)ntrip->buff,NTRIP_RSP_HTTP))) { /* http response */
@@ -3323,7 +3337,7 @@ extern void strsendcmd(stream_t *str, const char *cmd)
                 sleepms(ms);
             }
             else if (!strncmp(msg+1,"BRATE",5)) { /* set bitrate */
-                if (sscanf(msg+6,"%d",&brate)<1) brate=9600;
+                if (sscanf(msg+6,"%d",&brate)<1) brate=115200;
                 set_brate(str,brate);
                 sleepms(500);
             }

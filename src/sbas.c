@@ -484,12 +484,6 @@ static void readmsgs(const char *file, int sel, gtime_t ts, gtime_t te,
             if (sscanf(++p,"%d,%d",&ch,&prn)<2) continue;
             if (!(p=getfield(p,4))) continue;
         }
-        else if (!strncmp(buff,"$FRMA",5)) { /* NovAtel OEM3 */
-            if (!(p=getfield(buff,2))) continue;
-            if (sscanf(p,"%d,%lf,%d",&week,&tow,&prn)<3) continue;
-            if (!(p=getfield(p,6))) continue;
-            if (week<WEEKOFFSET) week+=WEEKOFFSET;
-        }
         else continue;
         
         if (sel!=0&&sel!=prn) continue;

@@ -36,6 +36,7 @@
 *           2017/05/26 1.14 support TERSUS
 *           2018/10/10 1.15 update reference [5]
 *                           add set of eph->code/flag for galileo and beidou
+*           2018/12/05 1.16 add test of galileo i/nav word type 5
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 #include <stdint.h>
@@ -160,9 +161,9 @@ extern int decode_gal_inav(const unsigned char *buff, eph_t *eph)
     e1b_dvs    =getbitu(buff,i, 1);
     
     /* test word types */
-    if (type[0]!=0||type[1]!=1||type[2]!=2||type[3]!=3||type[4]!=4) {
-        trace(3,"decode_gal_inav error: type=%d %d %d %d %d\n",type[0],type[1],
-              type[2],type[3],type[4]);
+    if (type[0]!=0||type[1]!=1||type[2]!=2||type[3]!=3||type[4]!=4||type[5]!=5) {
+        trace(3,"decode_gal_inav error: type=%d %d %d %d %d %d\n",type[0],
+              type[1],type[2],type[3],type[4],type[5]);
         return 0;
     }
     /* test word type 0 time field */
@@ -995,9 +996,9 @@ extern int input_raw(raw_t *raw, int format, unsigned char data)
     
     switch (format) {
         case STRFMT_OEM4 : return input_oem4 (raw,data);
-        case STRFMT_OEM3 : return input_oem3 (raw,data);
+        case STRFMT_CNAV : return input_cnav (raw,data);
         case STRFMT_UBX  : return input_ubx  (raw,data);
-        case STRFMT_SS2  : return input_ss2  (raw,data);
+        case STRFMT_SBP  : return input_sbp  (raw,data);
         case STRFMT_CRES : return input_cres (raw,data);
         case STRFMT_STQ  : return input_stq  (raw,data);
         case STRFMT_GW10 : return input_gw10 (raw,data);
@@ -1025,9 +1026,9 @@ extern int input_rawf(raw_t *raw, int format, FILE *fp)
     
     switch (format) {
         case STRFMT_OEM4 : return input_oem4f (raw,fp);
-        case STRFMT_OEM3 : return input_oem3f (raw,fp);
+        case STRFMT_CNAV : return input_cnavf (raw,fp);
         case STRFMT_UBX  : return input_ubxf  (raw,fp);
-        case STRFMT_SS2  : return input_ss2f  (raw,fp);
+        case STRFMT_SBP  : return input_sbpf  (raw,fp);
         case STRFMT_CRES : return input_cresf (raw,fp);
         case STRFMT_STQ  : return input_stqf  (raw,fp);
         case STRFMT_GW10 : return input_gw10f (raw,fp);

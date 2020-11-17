@@ -40,11 +40,13 @@ __fastcall TInputStrDialog::TInputStrDialog(TComponent* Owner)
 	Format1->Items->Add("Aceinna-user");
 	Format2->Items->Add("Aceinna-user");
 	Format3->Items->Add("Aceinna-user");
+//
+//	Format1->Items->Add("Aceinna-debug");
+//	Format2->Items->Add("Aceinna-debug");
+//	Format3->Items->Add("Aceinna-debug");
 
-	Format1->Items->Add("Aceinna-debug");
-	Format2->Items->Add("Aceinna-debug");
-	Format3->Items->Add("Aceinna-debug");
-
+	Format1->Items->Add("Aceinna-raw");
+	Format2->Items->Add("Aceinna-raw");
 	Format3->Items->Add("SP3");
 }
 //---------------------------------------------------------------------------
@@ -67,24 +69,34 @@ void __fastcall TInputStrDialog::FormShow(TObject *Sender)
 	TimeTagC  ->Checked  =TimeTag;
 	TimeSpeedL->Text     =TimeSpeed;
 	TimeStartE->Text     =TimeStart;
-	Chk64Bit  ->Checked  =Time64Bit;
+		if (Time64Bit) {
+		  Time64BitL   ->ItemIndex=1;
+		} else {
+		  Time64BitL   ->ItemIndex=0;
+		}
 	NmeaPos1  ->Text     =s.sprintf("%.9f",NmeaPos[0]);
 	NmeaPos2  ->Text     =s.sprintf("%.9f",NmeaPos[1]);
 	NmeaPos3  ->Text     =s.sprintf("%.3f",NmeaPos[2]);
 	EditMaxBL ->Text     =s.sprintf("%.0f",MaxBL);
 	EditResetCmd->Text   =ResetCmd;
+    //aceinna add
 	if(Format[0]>=NRcv){
 		if(Format[0]== STRFMT_ACEINNA_USER)  Format1->ItemIndex =  NRcv + 0;
-		if(Format[0]== STRFMT_ACEINNA_DEBUG)  Format1->ItemIndex =  NRcv + 1;
+//		if(Format[0]== STRFMT_ACEINNA_DEBUG)  Format1->ItemIndex =  NRcv + 1;
+//		if(Format[0]== STRFMT_ACEINNA)  Format1->ItemIndex =  NRcv + 2;
+		if(Format[0]== STRFMT_ACEINNA)  Format1->ItemIndex =  NRcv + 1;
 	}
 	if(Format[1]>=NRcv){
 		if(Format[1]== STRFMT_ACEINNA_USER)  Format2->ItemIndex =  NRcv + 0;
-		if(Format[1]== STRFMT_ACEINNA_DEBUG)  Format2->ItemIndex =  NRcv + 1;
+//		if(Format[1]== STRFMT_ACEINNA_DEBUG)  Format2->ItemIndex =  NRcv + 1;
+//		if(Format[1]== STRFMT_ACEINNA)  Format2->ItemIndex =  NRcv + 2;
+		if(Format[1]== STRFMT_ACEINNA)  Format2->ItemIndex =  NRcv + 1;
 	}
-		if(Format[2]>=NRcv){
+	if(Format[2]>=NRcv){
 		if(Format[2]== STRFMT_ACEINNA_USER)  Format3->ItemIndex =  NRcv + 0;
-		if(Format[2]== STRFMT_ACEINNA_DEBUG)  Format3->ItemIndex =  NRcv + 1;
-		if(Format[2]== STRFMT_SP3)  Format3->ItemIndex =  NRcv + 2;
+//		if(Format[2]== STRFMT_ACEINNA_DEBUG)  Format3->ItemIndex =  NRcv + 1;
+//		if(Format[2]== STRFMT_SP3)  Format3->ItemIndex =  NRcv + 2;
+		if(Format[2]== STRFMT_SP3)  Format3->ItemIndex =  NRcv + 1;
     }
 	UpdateEnable();
 }
@@ -100,6 +112,7 @@ void __fastcall TInputStrDialog::BtnOkClick(TObject *Sender)
 	Format[0]  =Format1   ->ItemIndex;
 	Format[1]  =Format2->ItemIndex;//<NRcv?Format2->ItemIndex:STRFMT_SP3+Format2->ItemIndex-NRcv;
 	Format[2]  =Format3->ItemIndex;//<NRcv?Format3->ItemIndex:STRFMT_SP3+Format3->ItemIndex-NRcv;
+	Time64Bit  =Time64BitL->ItemIndex;
 	Paths[0][2]=SetFilePath(FilePath1->Text);
 	Paths[1][2]=SetFilePath(FilePath2->Text);
 	Paths[2][2]=SetFilePath(FilePath3->Text);
@@ -107,23 +120,28 @@ void __fastcall TInputStrDialog::BtnOkClick(TObject *Sender)
 	TimeTag    =TimeTagC  ->Checked;
 	TimeSpeed  =TimeSpeedL->Text;
 	TimeStart  =TimeStartE->Text;
-	Time64Bit  =Chk64Bit  ->Checked;
 	NmeaPos[0] =str2dbl(NmeaPos1->Text);
 	NmeaPos[1] =str2dbl(NmeaPos2->Text);
 	NmeaPos[2] =str2dbl(NmeaPos3->Text);
 	MaxBL      =str2dbl(EditMaxBL->Text);
+    //aceinna add
 	if(Format1->ItemIndex >=NRcv){
-		 if(Format1->ItemIndex == NRcv) Format[0] =  STRFMT_ACEINNA_USER;
-		 if(Format1->ItemIndex == NRcv+1) Format[0] =  STRFMT_ACEINNA_DEBUG;
+		if(Format1->ItemIndex == NRcv) Format[0] =  STRFMT_ACEINNA_USER;
+		if(Format1->ItemIndex == NRcv+1) Format[0] =  STRFMT_ACEINNA;
+//		 if(Format1->ItemIndex == NRcv+1) Format[0] =  STRFMT_ACEINNA_DEBUG;
+//		 if(Format1->ItemIndex == NRcv+2) Format[0] =  STRFMT_ACEINNA;
 	}
 	if(Format2->ItemIndex >=NRcv){
-		 if(Format2->ItemIndex == NRcv) Format[1] =  STRFMT_ACEINNA_USER;
-		 if(Format2->ItemIndex == NRcv+1) Format[1] =  STRFMT_ACEINNA_DEBUG;
+		if(Format2->ItemIndex == NRcv) Format[1] =  STRFMT_ACEINNA_USER;
+		if(Format2->ItemIndex == NRcv+1) Format[1] =  STRFMT_ACEINNA;
+//		 if(Format2->ItemIndex == NRcv+1) Format[1] =  STRFMT_ACEINNA_DEBUG;
+//		 if(Format2->ItemIndex == NRcv+2) Format[1] =  STRFMT_ACEINNA;
 	}
 	if(Format3->ItemIndex >=NRcv){
-		 if(Format3->ItemIndex == NRcv) Format[2] =  STRFMT_ACEINNA_USER;
-		 if(Format3->ItemIndex == NRcv+1) Format[2] =  STRFMT_ACEINNA_DEBUG;
-		 if(Format3->ItemIndex == NRcv+2) Format[2] =  STRFMT_SP3;
+		if(Format3->ItemIndex == NRcv) Format[2] =  STRFMT_ACEINNA_USER;
+		if(Format3->ItemIndex == NRcv+1) Format[2] =  STRFMT_SP3;
+//		 if(Format3->ItemIndex == NRcv+1) Format[2] =  STRFMT_ACEINNA_DEBUG;
+//		 if(Format3->ItemIndex == NRcv+2) Format[2] =  STRFMT_SP3;
 	}
 	ResetCmd   =EditResetCmd->Text;
 }
@@ -182,7 +200,7 @@ AnsiString __fastcall TInputStrDialog::SetFilePath(AnsiString path)
 	if (TimeTagC->Checked     ) path+="::T";
 	if (TimeStartE->Text!="0" ) path+="::+"+TimeStartE->Text;
 	path+="::"+TimeSpeedL->Text;
-	if (Chk64Bit->Checked     ) path+="::P=8";
+    if (Time64Bit) { path+="::P=8"; } else { path+="::P=4"; };
 	return path;
 }
 //---------------------------------------------------------------------------
@@ -427,9 +445,9 @@ void __fastcall TInputStrDialog::UpdateEnable(void)
 	TimeTagC  ->Enabled=ena1;
 	TimeStartE->Enabled=ena1&&TimeTagC->Checked;
 	TimeSpeedL->Enabled=ena1&&TimeTagC->Checked;
+    Time64BitL->Enabled=ena1&&TimeTagC->Checked;
 	LabelF2   ->Enabled=ena1&&TimeTagC->Checked;
 	LabelF3   ->Enabled=ena1&&TimeTagC->Checked;
-	Chk64Bit  ->Enabled=ena1&&TimeTagC->Checked;
 }
 //---------------------------------------------------------------------------
 

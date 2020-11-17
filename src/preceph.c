@@ -52,7 +52,7 @@
 #define EXTERR_EPH  5E-7            /* extrapolation error for ephem (m/s^2) */
 
 /* satellite code to satellite system ----------------------------------------*/
-extern int code2sys(char code)
+static int code2sys(char code)
 {
     if (code=='G'||code==' ') return SYS_GPS;
     if (code=='R') return SYS_GLO;
@@ -273,8 +273,8 @@ extern void readsp3(const char *file, nav_t *nav, int opt)
     for (i=j=0;i<n;i++) {
         if (!(ext=strrchr(efiles[i],'.'))) continue;
         
-        if (!strstr(ext+1,"sp3")&&!strstr(ext+1,".SP3")&&
-            !strstr(ext+1,"eph")&&!strstr(ext+1,".EPH")) continue;
+        if (!strstr(ext+1,"sp3")&&!strstr(ext+1,"SP3")&&
+            !strstr(ext+1,"eph")&&!strstr(ext+1,"EPH")) continue;
         
         if (!(fp=fopen(efiles[i],"r"))) {
             trace(2,"sp3 file open error %s\n",efiles[i]);
@@ -319,7 +319,7 @@ extern int readsap(const char *file, gtime_t time, nav_t *nav)
     return 1;
 }
 /* read dcb parameters file --------------------------------------------------*/
-int readdcbf(const char *file, nav_t *nav, const sta_t *sta)
+static int readdcbf(const char *file, nav_t *nav, const sta_t *sta)
 {
     FILE *fp;
     double cbias;
@@ -606,7 +606,7 @@ static int pephclk(gtime_t time, int sat, const nav_t *nav, double *dts,
     if (nav->nc<2||
         timediff(time,nav->pclk[0].time)<-MAXDTE||
         timediff(time,nav->pclk[nav->nc-1].time)>MAXDTE) {
-        trace(3,"no prec clock %s sat=%2d\n",time_str(time,0),sat);
+        trace(4,"no prec clock %s sat=%2d\n",time_str(time,0),sat);
         return 1;
     }
     /* binary search */

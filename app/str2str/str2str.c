@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * str2str.c : console version of stream server
 *
-*          Copyright (C) 2007-2016 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2007-2018 by T.TAKASU, All rights reserved.
 *
 * version : $Revision: 1.1 $ $Date: 2008/07/17 21:54:53 $
 * history : 2009/06/17  1.0  new
@@ -77,9 +77,9 @@ static const char *help[]={
 "    rtcm2        : RTCM 2 (only in)",
 "    rtcm3        : RTCM 3",
 "    nov          : NovAtel OEMV/4/6,OEMStar (only in)",
-"    oem3         : NovAtel OEM3 (only in)",
+"    cnav         : ComNav (only in)",
 "    ubx          : ublox LEA-4T/5T/6T (only in)",
-"    ss2          : NovAtel Superstar II (only in)",
+"    swiftnav     : SwiftNav Piksi Multi",
 "    hemis        : Hemisphere Eclipse/Crescent (only in)",
 "    stq          : SkyTraq S1315F (only in)",
 "    gw10         : Furuno GW10 (only in)",
@@ -146,9 +146,9 @@ static void decodefmt(char *path, int *fmt)
         if      (!strcmp(p,"#rtcm2")) *fmt=STRFMT_RTCM2;
         else if (!strcmp(p,"#rtcm3")) *fmt=STRFMT_RTCM3;
         else if (!strcmp(p,"#nov"  )) *fmt=STRFMT_OEM4;
-        else if (!strcmp(p,"#oem3" )) *fmt=STRFMT_OEM3;
+        else if (!strcmp(p,"#cnav" )) *fmt=STRFMT_CNAV;
         else if (!strcmp(p,"#ubx"  )) *fmt=STRFMT_UBX;
-        else if (!strcmp(p,"#ss2"  )) *fmt=STRFMT_SS2;
+        else if (!strcmp(p,"#swift")) *fmt=STRFMT_SBP;
         else if (!strcmp(p,"#hemis")) *fmt=STRFMT_CRES;
         else if (!strcmp(p,"#stq"  )) *fmt=STRFMT_STQ;
         else if (!strcmp(p,"#gw10" )) *fmt=STRFMT_GW10;

@@ -51,7 +51,6 @@ __published:
 	TGroupBox *GroupBox4;
 	TCheckBox *Freq1;
 	TCheckBox *Freq2;
-	TCheckBox *Freq3;
 	TCheckBox *Freq4;
 	TCheckBox *Obs1;
 	TCheckBox *Nav5;

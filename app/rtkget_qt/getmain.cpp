@@ -38,9 +38,9 @@
 #include "staoptdlg.h"
 #include "timedlg.h"
 #include "viewer.h"
+#include "locale.h"
 
 #include <cstdio>
-#include <locale.h>
 
 #define PRGNAME     "RTKGET-QT"  // program name
 

@@ -1,7 +1,7 @@
 /*------------------------------------------------------------------------------
 * notvatel.c : NovAtel OEM6/OEM5/OEM4/OEM3 receiver functions
 *
-*          Copyright (C) 2007-2018 by T.TAKASU, All rights reserved.
+*          Copyright (C) 2007-2019 by T.TAKASU, All rights reserved.
 *
 * reference :
 *     [1] NovAtel, OM-20000094 Rev6 OEMV Family Firmware Reference Manual, 2008
@@ -54,18 +54,15 @@
 *           2018/10/10 1.16 fix problem on data souce for galileo ephemeris
 *                           output L2W instead of L2D for L2Pcodeless
 *                           test toc difference to output beidou ephemeris
+*           2019/05/10 1.17 save galileo E5b data to obs index 2
 *-----------------------------------------------------------------------------*/
 #include "rtklib.h"
 
 #define OEM4SYNC1   0xAA        /* oem4 message start sync code 1 */
 #define OEM4SYNC2   0x44        /* oem4 message start sync code 2 */
 #define OEM4SYNC3   0x12        /* oem4 message start sync code 3 */
-#define OEM3SYNC1   0xAA        /* oem3 message start sync code 1 */
-#define OEM3SYNC2   0x44        /* oem3 message start sync code 2 */
-#define OEM3SYNC3   0x11        /* oem3 message start sync code 3 */
 
 #define OEM4HLEN    28          /* oem4 message header length (bytes) */
-#define OEM3HLEN    12          /* oem3 message header length (bytes) */
 
 #define ID_ALMANAC  73          /* message id: oem4 decoded almanac */
 #define ID_GLOALMANAC 718       /* message id: oem4 glonass decoded almanac */
@@ -90,16 +87,6 @@
 #define ID_RAWCNAVFRAME 1066    /* message id: oem6 raw cnav frame data */
 #define ID_BDSEPHEMERIS 1696    /* message id: oem6 decoded bds ephemeris */
 
-#define ID_ALMB     18          /* message id: oem3 decoded almanac */
-#define ID_IONB     16          /* message id: oem3 iono parameters */
-#define ID_UTCB     17          /* message id: oem3 utc parameters */
-#define ID_FRMB     54          /* message id: oem3 framed raw navigation data */
-#define ID_RALB     15          /* message id: oem3 raw almanac */
-#define ID_RASB     66          /* message id: oem3 raw almanac set */
-#define ID_REPB     14          /* message id: oem3 raw ephemeris */
-#define ID_RGEB     32          /* message id: oem3 range measurement */
-#define ID_RGED     65          /* message id: oem3 range compressed */
-
 #define WL1         0.1902936727984
 #define WL2         0.2442102134246
 #define MAXVAL      8388608.0
@@ -119,14 +106,6 @@ static double         R8(unsigned char *p) {double         r; memcpy(&r,p,8); re
 static int exsign(unsigned int v, int bits)
 {
     return (int)(v&(1<<(bits-1))?v|(~0u<<bits):v);
-}
-/* checksum ------------------------------------------------------------------*/
-static unsigned char chksum(const unsigned char *buff, int len)
-{
-    unsigned char sum=0;
-    int i;
-    for (i=0;i<len;i++) sum^=buff[i];
-    return sum;
 }
 /* adjust weekly rollover of gps time ----------------------------------------*/
 static gtime_t adjweek(gtime_t time, double tow)
@@ -156,17 +135,6 @@ static int obsindex(obs_t *obs, gtime_t time, int sat)
         obs->data[i].code[j]=CODE_NONE;
     }
     obs->n++;
-    return i;
-}
-/* ura value (m) to ura index ------------------------------------------------*/
-static int uraindex(double value)
-{
-    static const double ura_eph[]={
-        2.4,3.4,4.85,6.85,9.65,13.65,24.0,48.0,96.0,192.0,384.0,768.0,1536.0,
-        3072.0,6144.0,0.0
-    };
-    int i;
-    for (i=0;i<15;i++) if (ura_eph[i]>=value) break;
     return i;
 }
 /* decode oem4 tracking status -------------------------------------------------
@@ -244,7 +212,7 @@ static int decode_trackstat(unsigned int stat, int *sys, int *code, int *track,
             case  1: freq=0; *code=CODE_L1B; break; /* E1B  (OEM6) */
             case  2: freq=0; *code=CODE_L1C; break; /* E1C  (OEM6) */
             case 12: freq=2; *code=CODE_L5Q; break; /* E5aQ (OEM6) */
-            case 17: freq=4; *code=CODE_L7Q; break; /* E5bQ (OEM6) */
+            case 17: freq=1; *code=CODE_L7Q; break; /* E5bQ (OEM6) */
             case 20: freq=5; *code=CODE_L8Q; break; /* AltBOCQ (OEM6) */
             default: freq=-1; break;
         }
@@ -289,7 +257,6 @@ static int checkpri(const char *opt, int sys, int code, int freq)
     else if (sys==SYS_GAL) {
         if (strstr(opt,"-EL1B")&&freq==0) return code==CODE_L1B?0:-1;
         if (code==CODE_L1B) return nex<1?-1:NFREQ;
-        if (code==CODE_L7Q) return nex<2?-1:NFREQ+1;
         if (code==CODE_L8Q) return nex<3?-1:NFREQ+2;
     }
     return freq<NFREQ?freq:-1;
@@ -1077,222 +1044,7 @@ static int decode_bdsephemerisb(raw_t *raw)
     raw->ephsat=eph.sat;
     return 2;
 }
-/* decode rgeb ---------------------------------------------------------------*/
-static int decode_rgeb(raw_t *raw)
-{
-    unsigned char *p=raw->buff+OEM3HLEN;
-    double tow,psr,adr,tt,lockt,dop,snr;
-    int i,week,nobs,prn,sat,stat,sys,parity,lli,index,freq;
-    
-    trace(3,"decode_rgeb: len=%d\n",raw->len);
-    
-    week=adjgpsweek(U4(p));
-    tow =R8(p+ 4);
-    nobs=U4(p+12);
-    raw->time=gpst2time(week,tow);
-    
-    if (raw->len!=OEM3HLEN+20+nobs*44) {
-        trace(2,"oem3 regb length error: len=%d nobs=%d\n",raw->len,nobs);
-        return -1;
-    }
-    for (i=0,p+=20;i<nobs;i++,p+=44) {
-        prn   =U4(p   );
-        psr   =R8(p+ 4);
-        adr   =R8(p+16);
-        dop   =R4(p+28);
-        snr   =R4(p+32);
-        lockt =R4(p+36);     /* lock time (s) */
-        stat  =I4(p+40);     /* tracking status */
-        freq  =(stat>>20)&1; /* L1:0,L2:1 */
-        sys   =(stat>>15)&7; /* satellite sys (0:GPS,1:GLONASS,2:WAAS) */
-        parity=(stat>>10)&1; /* parity known */
-        if (!(sat=satno(sys==1?SYS_GLO:(sys==2?SYS_SBS:SYS_GPS),prn))) {
-            trace(2,"oem3 regb satellite number error: sys=%d prn=%d\n",sys,prn);
-            continue;
-        }
-        if (raw->tobs[sat-1][freq].time!=0) {
-            tt=timediff(raw->time,raw->tobs[sat-1][freq]);
-            lli=lockt-raw->lockt[sat-1][freq]+0.05<tt||
-                parity!=raw->halfc[sat-1][freq];
-        }
-        else {
-            lli=0;
-        }
-        if (!parity) lli|=2;
-        raw->tobs [sat-1][freq]=raw->time;
-        raw->lockt[sat-1][freq]=lockt;
-        raw->halfc[sat-1][freq]=parity;
-        
-        if (fabs(timediff(raw->obs.data[0].time,raw->time))>1E-9) {
-            raw->obs.n=0;
-        }        
-        if ((index=obsindex(&raw->obs,raw->time,sat))>=0) {
-            raw->obs.data[index].L  [freq]=-adr; /* flip sign */
-            raw->obs.data[index].P  [freq]=psr;
-            raw->obs.data[index].D  [freq]=(float)dop;
-            raw->obs.data[index].SNR[freq]=
-                0.0<=snr&&snr<255.0?(unsigned char)(snr*4.0+0.5):0;
-            raw->obs.data[index].LLI[freq]=(unsigned char)lli;
-            raw->obs.data[index].code[freq]=freq==0?CODE_L1C:CODE_L2P;
-        }
-    }
-    return 1;
-}
-/* decode rged ---------------------------------------------------------------*/
-static int decode_rged(raw_t *raw)
-{
-    unsigned int word;
-    unsigned char *p=raw->buff+OEM3HLEN;
-    double tow,psrh,psrl,psr,adr,adr_rolls,tt,lockt,dop;
-    int i,week,nobs,prn,sat,stat,sys,parity,lli,index,freq,snr;
-    
-    trace(3,"decode_rged: len=%d\n",raw->len);
-    
-    nobs=U2(p);
-    week=adjgpsweek(U2(p+2));
-    tow =U4(p+4)/100.0;
-    raw->time=gpst2time(week,tow);
-    if (raw->len!=OEM3HLEN+12+nobs*20) {
-        trace(2,"oem3 regd length error: len=%d nobs=%d\n",raw->len,nobs);
-        return -1;
-    }
-    for (i=0,p+=12;i<nobs;i++,p+=20) {
-        word  =U4(p);
-        prn   =word&0x3F;
-        snr   =((word>>6)&0x1F)+20;
-        lockt =(word>>11)/32.0;
-        adr   =-I4(p+4)/256.0;
-        word  =U4(p+8);
-        psrh  =word&0xF;
-        dop   =exsign(word>>4,28)/256.0;
-        psrl  =U4(p+12);
-        stat  =U4(p+16)>>8;
-        freq  =(stat>>20)&1; /* L1:0,L2:1 */
-        sys   =(stat>>15)&7; /* satellite sys (0:GPS,1:GLONASS,2:WAAS) */
-        parity=(stat>>10)&1; /* parity known */
-        if (!(sat=satno(sys==1?SYS_GLO:(sys==2?SYS_SBS:SYS_GPS),prn))) {
-            trace(2,"oem3 regd satellite number error: sys=%d prn=%d\n",sys,prn);
-            continue;
-        }
-        psr=(psrh*4294967296.0+psrl)/128.0;
-        adr_rolls=floor((psr/(freq==0?WL1:WL2)-adr)/MAXVAL+0.5);
-        adr=adr+MAXVAL*adr_rolls;
-        
-        if (raw->tobs[sat-1][freq].time!=0) {
-            tt=timediff(raw->time,raw->tobs[sat-1][freq]);
-            lli=lockt-raw->lockt[sat-1][freq]+0.05<tt||
-                parity!=raw->halfc[sat-1][freq];
-        }
-        else {
-            lli=0;
-        }
-        if (!parity) lli|=2;
-        raw->tobs [sat-1][freq]=raw->time;
-        raw->lockt[sat-1][freq]=lockt;
-        raw->halfc[sat-1][freq]=parity;
-        
-        if (fabs(timediff(raw->obs.data[0].time,raw->time))>1E-9) {
-            raw->obs.n=0;
-        }
-        if ((index=obsindex(&raw->obs,raw->time,sat))>=0) {
-            raw->obs.data[index].L  [freq]=adr;
-            raw->obs.data[index].P  [freq]=psr;
-            raw->obs.data[index].D  [freq]=(float)dop;
-            raw->obs.data[index].SNR[freq]=(unsigned char)(snr*4.0+0.5);
-            raw->obs.data[index].LLI[freq]=(unsigned char)lli;
-            raw->obs.data[index].code[freq]=freq==0?CODE_L1C:CODE_L2P;
-        }
-    }
-    return 1;
-}
-/* decode repb ---------------------------------------------------------------*/
-static int decode_repb(raw_t *raw)
-{
-    unsigned char *p=raw->buff+OEM3HLEN;
-    eph_t eph={0};
-    int prn,sat;
-    
-    trace(3,"decode_repb: len=%d\n",raw->len);
-    
-    if (raw->len!=OEM3HLEN+96) {
-        trace(2,"oem3 repb length error: len=%d\n",raw->len);
-        return -1;
-    }
-    prn=U4(p);
-    if (!(sat=satno(SYS_GPS,prn))) {
-        trace(2,"oem3 repb satellite number error: prn=%d\n",prn);
-        return -1;
-    }
-    if (decode_frame(p+ 4,&eph,NULL,NULL,NULL,NULL)!=1||
-        decode_frame(p+34,&eph,NULL,NULL,NULL,NULL)!=2||
-        decode_frame(p+64,&eph,NULL,NULL,NULL,NULL)!=3) {
-        trace(2,"oem3 repb subframe error: prn=%d\n",prn);
-        return -1;
-    }
-    if (!strstr(raw->opt,"-EPHALL")) {
-        if (eph.iode==raw->nav.eph[sat-1].iode) return 0; /* unchanged */
-    }
-    eph.sat=sat;
-    raw->nav.eph[sat-1]=eph;
-    raw->ephsat=sat;
-    return 2;
-}
-/* decode frmb --------------------------------------------------------------*/
-static int decode_frmb(raw_t *raw)
-{
-    unsigned char *p=raw->buff+OEM3HLEN;
-    double tow;
-    int i,week,prn,nbit;
-    
-    trace(3,"decode_frmb: len=%d\n",raw->len);
-    
-    week=adjgpsweek(U4(p));
-    tow =R8(p+ 4);
-    prn =U4(p+12);
-    nbit=U4(p+20);
-    raw->time=gpst2time(week,tow);
-    if (nbit!=250) return 0;
-    if (prn<MINPRNSBS||MAXPRNSBS<prn) {
-        trace(2,"oem3 frmb satellite number error: prn=%d\n",prn);
-        return -1;
-    }
-    raw->sbsmsg.week=week;
-    raw->sbsmsg.tow=(int)tow;
-    raw->sbsmsg.prn=prn;
-    for (i=0;i<29;i++) raw->sbsmsg.msg[i]=p[24+i];
-    return 3;
-}
-/* decode ionb ---------------------------------------------------------------*/
-static int decode_ionb(raw_t *raw)
-{
-    unsigned char *p=raw->buff+OEM3HLEN;
-    int i;
-    
-    if (raw->len!=64+OEM3HLEN) {
-        trace(2,"oem3 ionb length error: len=%d\n",raw->len);
-        return -1;
-    }
-    for (i=0;i<8;i++) raw->nav.ion_gps[i]=R8(p+i*8);
-    return 9;
-}
-/* decode utcb ---------------------------------------------------------------*/
-static int decode_utcb(raw_t *raw)
-{
-    unsigned char *p=raw->buff+OEM3HLEN;
-    
-    trace(3,"decode_utcb: len=%d\n",raw->len);
-    
-    if (raw->len!=40+OEM3HLEN) {
-        trace(2,"oem3 utcb length error: len=%d\n",raw->len);
-        return -1;
-    }
-    raw->nav.utc_gps[0]=R8(p   );
-    raw->nav.utc_gps[1]=R8(p+ 8);
-    raw->nav.utc_gps[2]=U4(p+16);
-    raw->nav.utc_gps[3]=adjgpsweek(U4(p+20));
-    raw->nav.leaps =I4(p+28);
-    return 9;
-}
+
 /* decode oem4 message -------------------------------------------------------*/
 static int decode_oem4(raw_t *raw)
 {
@@ -1342,44 +1094,14 @@ static int decode_oem4(raw_t *raw)
     }
     return 0;
 }
-/* decode oem3 message -------------------------------------------------------*/
-static int decode_oem3(raw_t *raw)
-{
-    int type=U4(raw->buff+4);
-    
-    trace(3,"decode_oem3: type=%3d len=%d\n",type,raw->len);
-    
-    /* checksum */
-    if (chksum(raw->buff,raw->len)) {
-        trace(2,"oem3 checksum error: type=%3d len=%d\n",type,raw->len);
-        return -1;
-    }
-    if (raw->outtype) {
-        sprintf(raw->msgtype,"OEM3 %4d (%4d):",type,raw->len);
-    }
-    switch (type) {
-        case ID_RGEB: return decode_rgeb(raw);
-        case ID_RGED: return decode_rged(raw);
-        case ID_REPB: return decode_repb(raw);
-        case ID_FRMB: return decode_frmb(raw);
-        case ID_IONB: return decode_ionb(raw);
-        case ID_UTCB: return decode_utcb(raw);
-    }
-    return 0;
-}
 /* sync header ---------------------------------------------------------------*/
 static int sync_oem4(unsigned char *buff, unsigned char data)
 {
     buff[0]=buff[1]; buff[1]=buff[2]; buff[2]=data;
     return buff[0]==OEM4SYNC1&&buff[1]==OEM4SYNC2&&buff[2]==OEM4SYNC3;
 }
-static int sync_oem3(unsigned char *buff, unsigned char data)
-{
-    buff[0]=buff[1]; buff[1]=buff[2]; buff[2]=data;
-    return buff[0]==OEM3SYNC1&&buff[1]==OEM3SYNC2&&buff[2]==OEM3SYNC3;
-}
-/* input oem4/oem3 raw data from stream ----------------------------------------
-* fetch next novatel oem4/oem3 raw data and input a mesasge from stream
+/* input oem4 raw data from stream ----------------------------------------
+* fetch next novatel oem4 raw data and input a mesasge from stream
 * args   : raw_t *raw   IO     receiver raw data control struct
 *          unsigned char data I stream data (1 byte)
 * return : status (-1: error message, 0: no message, 1: input observation data,
@@ -1420,30 +1142,8 @@ extern int input_oem4(raw_t *raw, unsigned char data)
     /* decode oem4 message */
     return decode_oem4(raw);
 }
-extern int input_oem3(raw_t *raw, unsigned char data)
-{
-    trace(5,"input_oem3: data=%02x\n",data);
-    
-    /* synchronize frame */
-    if (raw->nbyte==0) {
-        if (sync_oem3(raw->buff,data)) raw->nbyte=3;
-        return 0;
-    }
-    raw->buff[raw->nbyte++]=data;
-    
-    if (raw->nbyte==12&&(raw->len=U4(raw->buff+8))>MAXRAWLEN) {
-        trace(2,"oem3 length error: len=%d\n",raw->len);
-        raw->nbyte=0;
-        return -1;
-    }
-    if (raw->nbyte<12||raw->nbyte<raw->len) return 0;
-    raw->nbyte=0;
-    
-    /* decode oem3 message */
-    return decode_oem3(raw);
-}
-/* input oem4/oem3 raw data from file ------------------------------------------
-* fetch next novatel oem4/oem3 raw data and input a message from file
+/* input oem4 raw data from file ------------------------------------------
+* fetch next novatel oem4 raw data and input a message from file
 * args   : raw_t  *raw   IO     receiver raw data control struct
 *          int    format I      receiver raw data format (STRFMT_???)
 *          FILE   *fp    I      file pointer
@@ -1477,31 +1177,4 @@ extern int input_oem4f(raw_t *raw, FILE *fp)
     /* decode oem4 message */
     return decode_oem4(raw);
 }
-extern int input_oem3f(raw_t *raw, FILE *fp)
-{
-    int i,data;
-    
-    trace(4,"input_oem3f:\n");
-    
-    /* synchronize frame */
-    if (raw->nbyte==0) {
-        for (i=0;;i++) {
-            if ((data=fgetc(fp))==EOF) return -2;
-            if (sync_oem3(raw->buff,(unsigned char)data)) break;
-            if (i>=4096) return 0;
-        }
-    }
-    if (fread(raw->buff+3,1,9,fp)<9) return -2;
-    raw->nbyte=12;
-    
-    if ((raw->len=U4(raw->buff+8))>MAXRAWLEN) {
-        trace(2,"oem3 length error: len=%d\n",raw->len);
-        raw->nbyte=0;
-        return -1;
-    }
-    if (fread(raw->buff+12,1,raw->len-12,fp)<(size_t)(raw->len-12)) return -2;
-    raw->nbyte=0;
-    
-    /* decode oem3 message */
-    return decode_oem3(raw);
-}
+

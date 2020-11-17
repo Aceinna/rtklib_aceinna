@@ -42,7 +42,6 @@
 
 
 
-USEFORM("vmapdlg.cpp", VecMapDialog);
 USEFORM("..\appcmn\tcpoptdlg.cpp", TcpOptDialog);
 USEFORM("..\appcmn\serioptdlg.cpp", SerialOptDialog);
 USEFORM("..\appcmn\refdlg.cpp", RefDialog);
@@ -57,15 +56,15 @@ USEFORM("..\appcmn\aboutdlg.cpp", AboutDialog);
 USEFORM("..\appcmn\console.cpp", Console);
 USEFORM("..\appcmn\ftpoptdlg.cpp", FtpOptDialog);
 USEFORM("..\appcmn\fileoptdlg.cpp", FileOptDialog);
+USEFORM("conndlg.cpp", ConnectDialog);
 USEFORM("pntdlg.cpp", PntDialog);
 USEFORM("plotopt.cpp", PlotOptDialog);
-USEFORM("plotmain.cpp", Plot);
+USEFORM("vmapdlg.cpp", VecMapDialog);
 USEFORM("skydlg.cpp", SkyImgDialog);
 USEFORM("satdlg.cpp", SatDialog);
-USEFORM("gmview.cpp", GoogleMapView);
-USEFORM("geview.cpp", GoogleEarthView);
-USEFORM("conndlg.cpp", ConnectDialog);
+USEFORM("plotmain.cpp", Plot);
 USEFORM("mapdlg.cpp", MapAreaDialog);
+USEFORM("gmview.cpp", GoogleMapView);
 //---------------------------------------------------------------------------
 WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
@@ -90,7 +89,6 @@ WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		Application->CreateForm(__classid(TViewerOptDialog), &ViewerOptDialog);
 		Application->CreateForm(__classid(TPntDialog), &PntDialog);
 		Application->CreateForm(__classid(TConfDialog), &ConfDialog);
-		Application->CreateForm(__classid(TGoogleEarthView), &GoogleEarthView);
 		Application->CreateForm(__classid(TFtpOptDialog), &FtpOptDialog);
 		Application->CreateForm(__classid(TConsole), &Console);
 		Application->CreateForm(__classid(TGoogleMapView), &GoogleMapView);

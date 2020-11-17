@@ -46,7 +46,7 @@ static char proxyaddr[MAXSTR]="";       /* proxy address */
 #define FLGOPT  "0:off,1:std+2:age/ratio/ns"
 #define ISTOPT  "0:off,1:serial,2:file,3:tcpsvr,4:tcpcli,7:ntripcli,8:ftp,9:http"
 #define OSTOPT  "0:off,1:serial,2:file,3:tcpsvr,4:tcpcli,6:ntripsvr"
-#define FMTOPT  "0:rtcm2,1:rtcm3,2:oem4,3:oem3,4:ubx,5:ss2,6:hemis,7:skytraq,8:gw10,9:javad,10:nvs,11:binex,12:rt17,13:sbf,14:cmr,17:sp3"
+#define FMTOPT  "0:rtcm2,1:rtcm3,2:oem4,3:oem3,4:ubx,5:swift,6:hemis,7:skytraq,8:gw10,9:javad,10:nvs,11:binex,12:rt17,13:sbf,14:cmr,15:tersus,17:sp3"
 #define NMEOPT  "0:off,1:latlon,2:single"
 #define SOLOPT  "0:llh,1:xyz,2:enu,3:nmea"
 #define MSGOPT  "0:all,1:rover,2:base,3:corr"
@@ -416,6 +416,8 @@ void __fastcall TOptDialog::GetOpt(void)
 	GloAmbRes	 ->ItemIndex=PrcOpt.glomodear;
 	BdsAmbRes	 ->ItemIndex=PrcOpt.bdsmodear;
 	ValidThresAR ->Text     =s.sprintf("%.1f",PrcOpt.thresar[0]);
+	MaxPosVarAR  ->Text     =s.sprintf("%.3f",PrcOpt.thresar[1]);
+	GloHwBias    ->Text     =s.sprintf("%.3f",PrcOpt.thresar[2]);
 	OutCntResetAmb->Text    =s.sprintf("%d",  PrcOpt.maxout);
 	LockCntFixAmb->Text     =s.sprintf("%d",  PrcOpt.minlock);
 	FixCntHoldAmb->Text     =s.sprintf("%d",  PrcOpt.minfix);
@@ -424,10 +426,17 @@ void __fastcall TOptDialog::GetOpt(void)
 	MaxAgeDiff	 ->Text     =s.sprintf("%.1f",PrcOpt.maxtdiff);
 	RejectGdop   ->Text     =s.sprintf("%.1f",PrcOpt.maxgdop);
 	RejectThres  ->Text     =s.sprintf("%.1f",PrcOpt.maxinno);
+	VarHoldAmb   ->Text     =s.sprintf("%.4f",PrcOpt.varholdamb);
+	GainHoldAmb  ->Text     =s.sprintf("%.4f",PrcOpt.gainholdamb);
 	SlipThres	 ->Text     =s.sprintf("%.3f",PrcOpt.thresslip);
 	ARIter		 ->Text     =s.sprintf("%d",  PrcOpt.armaxiter);
 	NumIter		 ->Text     =s.sprintf("%d",  PrcOpt.niter);
+	MinFixSats	 ->Text     =s.sprintf("%d",  PrcOpt.minfixsats);
+	MinHoldSats	 ->Text     =s.sprintf("%d",  PrcOpt.minholdsats);
+	MinDropSats	 ->Text     =s.sprintf("%d",  PrcOpt.mindropsats);
 	SyncSol		 ->ItemIndex=PrcOpt.syncsol;
+	ARFilter	 ->ItemIndex=PrcOpt.arfilter;
+	RcvStds	     ->ItemIndex=PrcOpt.rcvstds;
 	ExSatsE		 ->Text     =ExSats;
 	NavSys1		 ->Checked  =PrcOpt.navsys&SYS_GPS;
 	NavSys2		 ->Checked  =PrcOpt.navsys&SYS_GLO;
@@ -542,6 +551,8 @@ void __fastcall TOptDialog::SetOpt(void)
 	PrcOpt.glomodear =GloAmbRes   ->ItemIndex;
 	PrcOpt.bdsmodear =BdsAmbRes   ->ItemIndex;
 	PrcOpt.thresar[0]=str2dbl(ValidThresAR->Text);
+	PrcOpt.thresar[1]=str2dbl(MaxPosVarAR->Text);
+    PrcOpt.thresar[2]=str2dbl(GloHwBias->Text);
 	PrcOpt.maxout    =OutCntResetAmb->Text.ToInt();
 	PrcOpt.minlock   =LockCntFixAmb->Text.ToInt();
 	PrcOpt.minfix    =FixCntHoldAmb->Text.ToInt();
@@ -550,10 +561,17 @@ void __fastcall TOptDialog::SetOpt(void)
 	PrcOpt.maxtdiff  =str2dbl(MaxAgeDiff ->Text);
 	PrcOpt.maxgdop   =str2dbl(RejectGdop ->Text);
 	PrcOpt.maxinno   =str2dbl(RejectThres->Text);
+	PrcOpt.varholdamb=str2dbl(VarHoldAmb->Text);
+	PrcOpt.gainholdamb=str2dbl(GainHoldAmb->Text);
 	PrcOpt.thresslip =str2dbl(SlipThres  ->Text);
 	PrcOpt.armaxiter =ARIter      ->Text.ToInt();
+	PrcOpt.minfixsats =MinFixSats ->Text.ToInt();
+	PrcOpt.minholdsats =MinHoldSats->Text.ToInt();
+	PrcOpt.mindropsats =MinDropSats->Text.ToInt();
 	PrcOpt.niter     =NumIter     ->Text.ToInt();
 	PrcOpt.syncsol   =SyncSol     ->ItemIndex;
+	PrcOpt.arfilter  =ARFilter    ->ItemIndex;
+	PrcOpt.rcvstds   =RcvStds     ->ItemIndex;
 	ExSats			 =ExSatsE	  ->Text;
 	PrcOpt.navsys    =0;
 	if (NavSys1->Checked) PrcOpt.navsys|=SYS_GPS;
@@ -699,7 +717,6 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	
 	PosMode		 ->ItemIndex	=prcopt.mode;
 	Freq		 ->ItemIndex	=prcopt.nf>NFREQ-1?NFREQ-1:prcopt.nf-1;
-	Solution	 ->ItemIndex	=prcopt.soltype;
 	ElMask		 ->Text			=s.sprintf("%.0f",prcopt.elmin*R2D);
 	DynamicModel ->ItemIndex	=prcopt.dynamics;
 	TideCorr	 ->ItemIndex	=prcopt.tidecorr;
@@ -731,6 +748,8 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	GloAmbRes	 ->ItemIndex	=prcopt.glomodear;
 	BdsAmbRes	 ->ItemIndex	=prcopt.bdsmodear;
 	ValidThresAR ->Text			=s.sprintf("%.1f",prcopt.thresar[0]);
+	MaxPosVarAR  ->Text         =s.sprintf("%.3f",prcopt.thresar[1]);
+	GloHwBias    ->Text         =s.sprintf("%.3f",prcopt.thresar[2]);
 	OutCntResetAmb->Text		=s.sprintf("%d"  ,prcopt.maxout   );
 	FixCntHoldAmb->Text			=s.sprintf("%d"  ,prcopt.minfix   );
 	LockCntFixAmb->Text			=s.sprintf("%d"  ,prcopt.minlock  );
@@ -739,10 +758,17 @@ void __fastcall TOptDialog::LoadOpt(AnsiString file)
 	MaxAgeDiff	 ->Text			=s.sprintf("%.1f",prcopt.maxtdiff );
 	RejectGdop   ->Text			=s.sprintf("%.1f",prcopt.maxgdop  );
 	RejectThres  ->Text			=s.sprintf("%.1f",prcopt.maxinno  );
+	VarHoldAmb   ->Text			=s.sprintf("%.4f",prcopt.varholdamb);
+	GainHoldAmb  ->Text			=s.sprintf("%.4f",prcopt.gainholdamb);
 	SlipThres	 ->Text			=s.sprintf("%.3f",prcopt.thresslip);
 	ARIter		 ->Text			=s.sprintf("%d",  prcopt.armaxiter);
+	MinFixSats	 ->Text         =s.sprintf("%d",  prcopt.minfixsats);
+	MinHoldSats	 ->Text         =s.sprintf("%d",  prcopt.minholdsats);
+	MinDropSats	 ->Text         =s.sprintf("%d",  prcopt.mindropsats);
 	NumIter		 ->Text			=s.sprintf("%d",  prcopt.niter    );
 	SyncSol		 ->ItemIndex	=prcopt.syncsol;
+	ARFilter	 ->ItemIndex	=prcopt.arfilter;
+	RcvStds	     ->ItemIndex	=prcopt.rcvstds;
 	BaselineLen	 ->Text			=s.sprintf("%.3f",prcopt.baseline[0]);
 	BaselineSig	 ->Text			=s.sprintf("%.3f",prcopt.baseline[1]);
 	BaselineConst->Checked		=prcopt.baseline[0]>0.0;
@@ -913,7 +939,7 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 
 	prcopt.mode		=PosMode	 ->ItemIndex;
 	prcopt.nf		=Freq		 ->ItemIndex+1;
-	prcopt.soltype	=Solution	 ->ItemIndex;
+	prcopt.soltype	=0;   /* forward */
 	prcopt.elmin	=str2dbl(ElMask	->Text)*D2R;
 	prcopt.dynamics	=DynamicModel->ItemIndex;
 	prcopt.tidecorr	=TideCorr	 ->ItemIndex;
@@ -946,6 +972,8 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	prcopt.glomodear=GloAmbRes	->ItemIndex;
 	prcopt.bdsmodear=BdsAmbRes	->ItemIndex;
 	prcopt.thresar[0]=str2dbl(ValidThresAR->Text);
+	prcopt.thresar[1]=str2dbl(MaxPosVarAR->Text);
+	prcopt.thresar[2]=str2dbl(GloHwBias->Text);
 	prcopt.maxout	=str2dbl(OutCntResetAmb->Text);
 	prcopt.minfix	=str2dbl(FixCntHoldAmb->Text);
 	prcopt.minlock	=str2dbl(LockCntFixAmb->Text);
@@ -954,10 +982,17 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	prcopt.maxtdiff	=str2dbl(MaxAgeDiff	->Text);
 	prcopt.maxgdop	=str2dbl(RejectGdop ->Text);
 	prcopt.maxinno	=str2dbl(RejectThres->Text);
+	prcopt.varholdamb=str2dbl(VarHoldAmb->Text);
+	prcopt.gainholdamb=str2dbl(GainHoldAmb->Text);
 	prcopt.thresslip=str2dbl(SlipThres	->Text);
 	prcopt.armaxiter=str2dbl(ARIter		->Text);
+	prcopt.minfixsats=str2dbl(MinFixSats		->Text);
+	prcopt.minholdsats=str2dbl(MinHoldSats		->Text);
+	prcopt.mindropsats=str2dbl(MinDropSats		->Text);
 	prcopt.niter	=str2dbl(NumIter	->Text);
 	prcopt.syncsol	=SyncSol->ItemIndex;
+	prcopt.arfilter	=ARFilter->ItemIndex;
+	prcopt.rcvstds	=RcvStds->ItemIndex;
 	if (prcopt.mode==PMODE_MOVEB&&BaselineConst->Checked) {
 		prcopt.baseline[0]=str2dbl(BaselineLen->Text);
 		prcopt.baseline[1]=str2dbl(BaselineSig->Text);
@@ -1035,7 +1070,6 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	int ar=rtk||ppp;
 	
 	Freq           ->Enabled=rel;
-	Solution       ->Enabled=false;
 	DynamicModel   ->Enabled=rel;
 	TideCorr       ->Enabled=rel||ppp;
 	PosOpt1        ->Enabled=ppp;
@@ -1048,8 +1082,8 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	GloAmbRes      ->Enabled=ar&&AmbRes->ItemIndex>0&&NavSys2->Checked;
 	BdsAmbRes      ->Enabled=ar&&AmbRes->ItemIndex>0&&NavSys6->Checked;
 	ValidThresAR   ->Enabled=ar&&AmbRes->ItemIndex>=1&&AmbRes->ItemIndex<4;
-	ThresAR2       ->Enabled=ar&&AmbRes->ItemIndex>=4;
-	ThresAR3       ->Enabled=ar&&AmbRes->ItemIndex>=4;
+	MaxPosVarAR    ->Enabled=ar&&!ppp;
+	GloHwBias      ->Enabled=ar&&GloAmbRes->ItemIndex==2;
 	LockCntFixAmb  ->Enabled=ar&&AmbRes->ItemIndex>=1;
 	ElMaskAR       ->Enabled=ar&&AmbRes->ItemIndex>=1;
 	OutCntResetAmb ->Enabled=ar||ppp;
@@ -1058,9 +1092,16 @@ void __fastcall TOptDialog::UpdateEnable(void)
 	SlipThres      ->Enabled=ar||ppp;
 	MaxAgeDiff     ->Enabled=rel;
 	RejectThres    ->Enabled=rel||ppp;
+	VarHoldAmb     ->Enabled=ar&&AmbRes->ItemIndex==3;
+	GainHoldAmb    ->Enabled=ar&&AmbRes->ItemIndex==3;
 	ARIter         ->Enabled=ppp;
+	MinFixSats     ->Enabled=ar||ppp;
+	MinHoldSats    ->Enabled=ar||ppp;
+	MinDropSats    ->Enabled=ar||ppp;
 	NumIter        ->Enabled=rel||ppp;
 	SyncSol        ->Enabled=rel||ppp;
+	ARFilter       ->Enabled=ar||ppp;
+	RcvStds        ->Enabled=rel;
 	BaselineConst  ->Enabled=PosMode->ItemIndex==PMODE_MOVEB;
 	BaselineLen    ->Enabled=BaselineConst->Checked&&PosMode->ItemIndex==PMODE_MOVEB;
 	BaselineSig    ->Enabled=BaselineConst->Checked&&PosMode->ItemIndex==PMODE_MOVEB;
@@ -1190,6 +1231,13 @@ void __fastcall TOptDialog::ReadAntList(void)
 }
 //---------------------------------------------------------------------------
 void __fastcall TOptDialog::NavSys6Click(TObject *Sender)
+{
+	UpdateEnable();
+}
+//---------------------------------------------------------------------------
+
+
+void __fastcall TOptDialog::ObsWeightChange(TObject *Sender)
 {
 	UpdateEnable();
 }

@@ -62,7 +62,7 @@ __published:
 	TEdit *EditMaxBL;
 	TLabel *LabelMaxBL;
 	TLabel *LabelKm;
-	TCheckBox *Chk64Bit;
+	TComboBox *Time64BitL;
 	void __fastcall BtnOkClick(TObject *Sender);
 	void __fastcall FormShow(TObject *Sender);
 	void __fastcall BtnStr1Click(TObject *Sender);
