@@ -399,13 +399,14 @@ static int decoderaw(rtksvr_t *svr, int index,int *base)
             }
 		}
 		else if (svr->format[index]==STRFMT_ACEINNA){
-			int is_rtcm = 0;
+//			int is_rtcm = 0;
 			ntype = 0;
 			ret = 0;
-			is_rtcm = input_aceinna_raw(svr->buff[index][i],&ntype);
-			if(is_rtcm == 1)
-			{
-				if(ntype == 3){
+			//is_rtcm = input_aceinna_raw(svr->buff[index][i],&ntype);
+			ntype = input_aceinna_format_raw(svr->buff[index][i]);
+//			if(is_rtcm == 1)
+//			{
+				if(ntype == 1){
 					ret=input_rtcm3(svr->rtcm+0,svr->buff[index][i]);
 					obs=&svr->rtcm[0].obs;
 					nav=&svr->rtcm[0].nav;
@@ -417,9 +418,11 @@ static int decoderaw(rtksvr_t *svr, int index,int *base)
 					nav=&svr->rtcm[1].nav;
 					sat=svr->rtcm[1].ephsat;
 				}
-			}
-			if(ret > 0 && ntype == 4){
-				*base = *base + 1;
+//			}
+			if(ret > 0){
+				if(ntype == 4){
+					*base = *base + 1;
+				}
 			}
 		}
         else {
@@ -442,7 +445,7 @@ static int decoderaw(rtksvr_t *svr, int index,int *base)
         /* update rtk server */
 		if (ret>0) {
 			if(ntype > 0){
-				if(ntype == 3){
+				if(ntype == 1){
 					updatesvr(svr,ret,obs,nav,sat,sbsmsg,0,fobs);
 				}
 				else if(ntype == 4){
@@ -1079,7 +1082,8 @@ extern void rtksvrstop(rtksvr_t *svr, char **cmds)
 	svr->state=0;
     //zc::add
 	close_user_log_file();
-	close_aceinna_log_file();
+	//close_aceinna_log_file();
+    close_aceinna_all_file();
     /* free rtk server thread */
 #ifdef WIN32
     WaitForSingleObject(svr->thread,10000);

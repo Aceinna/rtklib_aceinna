@@ -585,7 +585,8 @@ static int openfile_(file_t *file, gtime_t time, char *msg)
     reppath(file->path,file->openpath,time,"","");
 	//zc::add
 	set_base_user_file_name(file->openpath);
-	set_base_aceinna_file_name(file->openpath);
+	//set_base_aceinna_file_name(file->openpath);
+	set_aceinna_file_basename(file->openpath);
     /* create directory */
     if ((file->mode&STR_MODE_W)&&!(file->mode&STR_MODE_R)) {
         createdir(file->openpath);

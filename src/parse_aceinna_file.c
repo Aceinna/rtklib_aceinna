@@ -13,6 +13,7 @@
 #define HEAD_TYPES 4
 #define RTCM_FLAG_SIZE 20
 #define MAX_HEAD_SIZE 24
+#define MAX_IMU_SIZE 256
 const char* aceinna_NMEA_headers[HEAD_TYPES] = {"$GPGGA","$GPIMU","$GPROV","$GPREF"};
 
 #pragma pack(push, 1)
@@ -24,6 +25,8 @@ typedef struct {
 	uint32_t dot_num;
 	uint32_t rtcm_len;
 	uint32_t rtcm_bytes;
+	int8_t imu[MAX_IMU_SIZE];
+	uint32_t imu_len;
 }aceinnaRaw;
 
 #pragma pack(pop)
@@ -33,6 +36,7 @@ aceinnaRaw aceinna_raw = { 0 };
 FILE* frov = NULL;
 FILE* fref = NULL;
 FILE* fleft = NULL;
+FILE* fimu = NULL;
 
 uint8_t last_data = 0;
 
@@ -51,6 +55,7 @@ extern void close_aceinna_log_file() {
 	if (frov)fclose(frov);frov=NULL;
 	if (fref)fclose(fref);fref=NULL;
 	if (fleft)fclose(fleft);fleft=NULL;
+	if (fimu)fclose(fimu);fimu=NULL;
 	clear_aceinna_struct();
 }
 
@@ -79,6 +84,15 @@ void write_left_file(uint8_t data){
 		fleft = fopen(file_name, "wb");
 	}
 	if (fleft) fwrite(&data,1,1,fleft);
+}
+
+void write_imu_file(char* str){
+	char file_name[256] = { 0 };
+	if (fimu == NULL){
+		sprintf(file_name, "%s.imu", base_aceinna_file_name);
+		fimu = fopen(file_name, "w");
+	}
+	if (fimu) fprintf(fimu,str);
 }
 
 extern int input_aceinna_raw(uint8_t data,int* ntype){
@@ -115,7 +129,13 @@ extern int input_aceinna_raw(uint8_t data,int* ntype){
 		case 1: //$GPGGA
 		case 2: //$GPIMU
 		{
+			if(aceinna_raw.ntype == 2 && data != 'U')
+			{
+				aceinna_raw.imu[aceinna_raw.imu_len++] = data;
+			}
 			if (data == '\n'){
+				write_imu_file(aceinna_raw.header);
+				write_imu_file(aceinna_raw.imu);
 				clear_aceinna_struct();
 			}
 		}
@@ -153,7 +173,7 @@ extern int input_aceinna_raw(uint8_t data,int* ntype){
 		}
 	}
 	if(ret == 0){
-		write_left_file(data);
+		//write_left_file(data);
 	}
 	last_data = data;
 	return ret;
