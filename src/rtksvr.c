@@ -378,53 +378,31 @@ static int decoderaw(rtksvr_t *svr, int index,int *base)
 				ret = 0;
             }
 		}
-		else if(svr->format[index]==STRFMT_ACEINNA_DEBUG)
-		{
-			ret = input_debug_raw(svr->buff[index][i],msg);
-			if(ret == 1)
-			{
-                double* llh = NULL;
-				double pos[3] = {0};
-            	svr->rtk.sol.time = utc2gpst(timeget());
-				llh = debug_raw_get_pos();
-				if (norm(llh,3)>0.0) {
-					pos[0] = llh[0]*D2R;
-					pos[1] = llh[1]*D2R;
-					pos[2] = llh[2];
-                   	svr->rtk.sol.stat = SOLQ_SINGLE;
-					pos2ecef(pos,svr->rtk.sol.rr);
-					writesol(svr,index);
-                }
-				ret = 51;
-            }
-		}
 		else if (svr->format[index]==STRFMT_ACEINNA){
-//			int is_rtcm = 0;
 			ntype = 0;
 			ret = 0;
-			//is_rtcm = input_aceinna_raw(svr->buff[index][i],&ntype);
 			ntype = input_aceinna_format_raw(svr->buff[index][i]);
-//			if(is_rtcm == 1)
-//			{
-				if(ntype == 1){
-					ret=input_rtcm3(svr->rtcm+0,svr->buff[index][i]);
-					obs=&svr->rtcm[0].obs;
-					nav=&svr->rtcm[0].nav;
-					sat=svr->rtcm[0].ephsat;
-				}
-				else if(ntype == 4){
-					ret=input_rtcm3(svr->rtcm+1,svr->buff[index][i]);
-					obs=&svr->rtcm[1].obs;
-					nav=&svr->rtcm[1].nav;
-					sat=svr->rtcm[1].ephsat;
-				}
-//			}
+			if(ntype == 1){
+				ret=input_rtcm3(svr->rtcm+0,svr->buff[index][i]);
+				obs=&svr->rtcm[0].obs;
+				nav=&svr->rtcm[0].nav;
+				sat=svr->rtcm[0].ephsat;
+			}
+			else if(ntype == 4){
+				ret=input_rtcm3(svr->rtcm+1,svr->buff[index][i]);
+				obs=&svr->rtcm[1].obs;
+				nav=&svr->rtcm[1].nav;
+				sat=svr->rtcm[1].ephsat;
+			}
 			if(ret > 0){
 				if(ntype == 4){
 					*base = *base + 1;
 				}
 			}
 		}
+		else if (svr->format[index]==STRFMT_INS2000){
+			input_ins2000_raw(svr->buff[index][i]);
+        }
         else {
             ret=input_raw(svr->raw+index,svr->format[index],svr->buff[index][i]);
             obs=&svr->raw[index].obs;
@@ -1082,8 +1060,8 @@ extern void rtksvrstop(rtksvr_t *svr, char **cmds)
 	svr->state=0;
     //zc::add
 	close_user_log_file();
-	//close_aceinna_log_file();
-    close_aceinna_all_file();
+	close_aceinna_all_file();
+	close_ins2000_all_file();
     /* free rtk server thread */
 #ifdef WIN32
     WaitForSingleObject(svr->thread,10000);

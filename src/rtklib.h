@@ -462,8 +462,8 @@ extern "C" {
 #define STRFMT_SBAS  20                 /* stream format: SBAS messages */
 #define STRFMT_NMEA  21                 /* stream format: NMEA 0183 */
 #define STRFMT_ACEINNA_USER  22
-#define STRFMT_ACEINNA_DEBUG  23
-#define STRFMT_ACEINNA  24
+#define STRFMT_ACEINNA  23
+#define STRFMT_INS2000  24
 #ifndef EXTLEX
 #define MAXRCVFMT    15                 /* max number of receiver format */
 #else
@@ -1965,9 +1965,9 @@ extern int showmsg(char *format,...);
 extern void settspan(gtime_t ts, gtime_t te);
 extern void settime(gtime_t time);
 
-int input_user_raw(uint8_t data,obs_t *obs,rtk_t* rtk,char* out_msg);
-int input_debug_raw(uint8_t data, char* out_msg);
-int input_aceinna_raw(uint8_t data,int* ntype);
+extern int input_user_raw(uint8_t data,obs_t *obs,rtk_t* rtk,char* out_msg);
+extern int input_aceinna_raw(uint8_t data,int* ntype);
+extern void input_ins2000_raw(uint8_t c);
 
 #ifdef __cplusplus
 }

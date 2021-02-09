@@ -682,6 +682,7 @@ extern void strsvrstop(strsvr_t *svr, char **cmds)
     svr->state=0;
 	//zc::add
 	close_user_log_file();
+	close_ins2000_all_file();
 #ifdef WIN32
     WaitForSingleObject(svr->thread,10000);
     CloseHandle(svr->thread);

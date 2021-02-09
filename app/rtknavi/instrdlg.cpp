@@ -40,14 +40,13 @@ __fastcall TInputStrDialog::TInputStrDialog(TComponent* Owner)
 	Format1->Items->Add("Aceinna-user");
 	Format2->Items->Add("Aceinna-user");
 	Format3->Items->Add("Aceinna-user");
-//
-//	Format1->Items->Add("Aceinna-debug");
-//	Format2->Items->Add("Aceinna-debug");
-//	Format3->Items->Add("Aceinna-debug");
 
 	Format1->Items->Add("Aceinna-raw");
 	Format2->Items->Add("Aceinna-raw");
 	Format3->Items->Add("SP3");
+
+	Format1->Items->Add("INS2000");
+	Format2->Items->Add("INS2000");
 }
 //---------------------------------------------------------------------------
 void __fastcall TInputStrDialog::FormShow(TObject *Sender)
@@ -82,20 +81,16 @@ void __fastcall TInputStrDialog::FormShow(TObject *Sender)
     //aceinna add
 	if(Format[0]>=NRcv){
 		if(Format[0]== STRFMT_ACEINNA_USER)  Format1->ItemIndex =  NRcv + 0;
-//		if(Format[0]== STRFMT_ACEINNA_DEBUG)  Format1->ItemIndex =  NRcv + 1;
-//		if(Format[0]== STRFMT_ACEINNA)  Format1->ItemIndex =  NRcv + 2;
 		if(Format[0]== STRFMT_ACEINNA)  Format1->ItemIndex =  NRcv + 1;
+		if(Format[0]== STRFMT_INS2000)  Format1->ItemIndex =  NRcv + 2;
 	}
 	if(Format[1]>=NRcv){
 		if(Format[1]== STRFMT_ACEINNA_USER)  Format2->ItemIndex =  NRcv + 0;
-//		if(Format[1]== STRFMT_ACEINNA_DEBUG)  Format2->ItemIndex =  NRcv + 1;
-//		if(Format[1]== STRFMT_ACEINNA)  Format2->ItemIndex =  NRcv + 2;
 		if(Format[1]== STRFMT_ACEINNA)  Format2->ItemIndex =  NRcv + 1;
+        if(Format[1]== STRFMT_INS2000)  Format2->ItemIndex =  NRcv + 2;
 	}
 	if(Format[2]>=NRcv){
 		if(Format[2]== STRFMT_ACEINNA_USER)  Format3->ItemIndex =  NRcv + 0;
-//		if(Format[2]== STRFMT_ACEINNA_DEBUG)  Format3->ItemIndex =  NRcv + 1;
-//		if(Format[2]== STRFMT_SP3)  Format3->ItemIndex =  NRcv + 2;
 		if(Format[2]== STRFMT_SP3)  Format3->ItemIndex =  NRcv + 1;
     }
 	UpdateEnable();
@@ -128,20 +123,17 @@ void __fastcall TInputStrDialog::BtnOkClick(TObject *Sender)
 	if(Format1->ItemIndex >=NRcv){
 		if(Format1->ItemIndex == NRcv) Format[0] =  STRFMT_ACEINNA_USER;
 		if(Format1->ItemIndex == NRcv+1) Format[0] =  STRFMT_ACEINNA;
-//		 if(Format1->ItemIndex == NRcv+1) Format[0] =  STRFMT_ACEINNA_DEBUG;
-//		 if(Format1->ItemIndex == NRcv+2) Format[0] =  STRFMT_ACEINNA;
+		if(Format1->ItemIndex == NRcv+2) Format[0] =  STRFMT_INS2000;
 	}
 	if(Format2->ItemIndex >=NRcv){
 		if(Format2->ItemIndex == NRcv) Format[1] =  STRFMT_ACEINNA_USER;
 		if(Format2->ItemIndex == NRcv+1) Format[1] =  STRFMT_ACEINNA;
-//		 if(Format2->ItemIndex == NRcv+1) Format[1] =  STRFMT_ACEINNA_DEBUG;
-//		 if(Format2->ItemIndex == NRcv+2) Format[1] =  STRFMT_ACEINNA;
+		if(Format2->ItemIndex == NRcv+2) Format[1] =  STRFMT_INS2000;
 	}
 	if(Format3->ItemIndex >=NRcv){
 		if(Format3->ItemIndex == NRcv) Format[2] =  STRFMT_ACEINNA_USER;
 		if(Format3->ItemIndex == NRcv+1) Format[2] =  STRFMT_SP3;
-//		 if(Format3->ItemIndex == NRcv+1) Format[2] =  STRFMT_ACEINNA_DEBUG;
-//		 if(Format3->ItemIndex == NRcv+2) Format[2] =  STRFMT_SP3;
+ //		if(Format3->ItemIndex == NRcv+2) Format[2] =  STRFMT_SP3;
 	}
 	ResetCmd   =EditResetCmd->Text;
 }

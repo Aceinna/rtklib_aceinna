@@ -30,7 +30,7 @@ __fastcall TStrMonDialog::TStrMonDialog(TComponent* Owner)
 		SelFmt->Items->Add(formatstrs[i]);
 	}
 	SelFmt->Items->Add("Aceinna-user");
-	SelFmt->Items->Add("Aceinna-debug");
+	SelFmt->Items->Add("Ins2000");
 	rtcm.outtype=raw.outtype=1;
 }
 //---------------------------------------------------------------------------
@@ -116,13 +116,9 @@ void __fastcall TStrMonDialog::AddMsg(unsigned char *msg, int len)
 	}
 	else if (StrFmt==20) {
 		for (i=0;i<len;i++) {
-		   ret = input_debug_raw(msg[i],buff);
-		   if(ret > 0){
-				n = strlen(buff);
-				AddConsole((unsigned char *)buff,n,1);
-           }
+		   input_ins2000_raw(msg[i]);
 		}
-    }
+	}
 	else if (StrFmt>=1) { // HEX/ASC
 		AddConsole(msg,len,StrFmt-1);
 	}
