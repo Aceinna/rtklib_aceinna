@@ -429,7 +429,7 @@ void __fastcall TMonitorDialog::ShowRtk(void)
 	
 	i=1;
 	Tbl->Cells[0][i  ]="RTKLIB Version";
-	Tbl->Cells[1][i++]=s.sprintf("%s %s",VER_RTKLIB,PATCH_LEVEL);
+	Tbl->Cells[1][i++]=s.sprintf("%s %s - %s",VER_RTKLIB,PATCH_LEVEL,ACEINNA_VER);
 	
 	Tbl->Cells[0][i  ]="RTK Server Thread";
 	Tbl->Cells[1][i++]=s.sprintf("%d",thread);

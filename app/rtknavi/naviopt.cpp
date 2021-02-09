@@ -1056,7 +1056,7 @@ void __fastcall TOptDialog::SaveOpt(AnsiString file)
 	strcpy(filopt.tempdir,LocalDir_Text.c_str());
 	
 	time2str(utc2gpst(timeget()),s,0);
-	sprintf(comment,"RTKNAVI options (%s, v.%s %s)",s,VER_RTKLIB,PATCH_LEVEL);
+	sprintf(comment,"RTKNAVI options (%s, v.%s %s - %s)",s,VER_RTKLIB,PATCH_LEVEL,ACEINNA_VER);
 	setsysopts(&prcopt,&solopt,&filopt);
 	if (!saveopts(file.c_str(),"w",comment,sysopts)||
 		!saveopts(file.c_str(),"a","",rcvopts)) return;

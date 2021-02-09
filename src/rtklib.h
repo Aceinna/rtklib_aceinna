@@ -61,6 +61,8 @@ extern "C" {
 
 #define PATCH_LEVEL "b33c"               /* patch level */
 
+#define ACEINNA_VER "Aceinna-v1.0.0"     /* aceinna version */
+
 #define COPYRIGHT_RTKLIB \
             "Copyright (C) 2007-2019 T.Takasu\nAll rights reserved."
 
